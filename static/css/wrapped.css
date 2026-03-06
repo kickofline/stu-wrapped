@@ -1,0 +1,488 @@
+/* ── Overflow lock — inactive slides at translateX(100%) caused body scroll ── */
+html:has(.wrapped-container),
+body:has(.wrapped-container) {
+  overflow: hidden;
+  height: 100%;
+}
+
+/* Hide nav on wrapped page */
+body:has(.wrapped-container) .top-nav { display: none; }
+
+/* ── Container ─────────────────────────────────────────────── */
+.wrapped-container {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+  cursor: pointer;
+}
+
+/* ── Dashboard shortcut ────────────────────────────────────── */
+.wrapped-dash-btn {
+  position: fixed;
+  top: 1rem;
+  left: 1.25rem;
+  font-size: .75rem;
+  color: rgba(255,255,255,.35);
+  letter-spacing: .05em;
+  z-index: 200;
+  text-decoration: none;
+  transition: color .2s;
+  pointer-events: all;
+}
+.wrapped-dash-btn:hover { color: rgba(255,255,255,.8); text-decoration: none; }
+
+/* ── Slides ────────────────────────────────────────────────── */
+.slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1.5rem, 5vw, 4rem);
+  overflow: hidden;          /* clips rank-number that starts above top edge */
+  opacity: 0;
+  transform: translateX(100%);
+  transition: transform .5s cubic-bezier(.76, 0, .24, 1),
+              opacity .5s ease;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.slide.active {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: all;
+}
+
+.slide.exiting {
+  opacity: 0;
+  transform: translateX(-100%);
+}
+
+/* ── Intro ─────────────────────────────────────────────────── */
+.slide-intro {
+  background: radial-gradient(ellipse at 30% 40%, #1a1a2e 0%, #0a0a0a 70%);
+  gap: .75rem;
+}
+
+.intro-eyebrow {
+  font-size: clamp(.7rem, 2vw, .95rem);
+  color: rgba(255,255,255,.4);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.intro-title {
+  font-size: clamp(3.5rem, 12vw, 9rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: .95;
+  text-align: center;
+  background: linear-gradient(135deg, #fff 30%, #e63946);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.intro-hint {
+  color: rgba(255,255,255,.25);
+  font-size: clamp(.8rem, 2vw, 1rem);
+  letter-spacing: .06em;
+  margin-top: 1.5rem;
+}
+
+/* ── Stats ─────────────────────────────────────────────────── */
+.slide-stats {
+  background: #0d1117;
+  text-align: center;
+}
+
+.stats-label {
+  font-size: clamp(.9rem, 2.5vw, 1.3rem);
+  color: rgba(255,255,255,.5);
+  font-weight: 500;
+}
+
+.stats-big {
+  font-size: clamp(5rem, 18vw, 12rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: .9;
+  color: #fff;
+}
+
+.stats-divider {
+  color: rgba(255,255,255,.15);
+  margin: .75rem 0;
+  font-size: 1.5rem;
+}
+
+.stats-sub {
+  font-size: clamp(.9rem, 2.5vw, 1.25rem);
+  color: rgba(255,255,255,.55);
+}
+
+.stats-sub strong { color: #fff; }
+
+/* ── Variety ───────────────────────────────────────────────── */
+.slide-variety {
+  background: linear-gradient(160deg, #0a3d62 0%, #0d1117 100%);
+  text-align: center;
+  gap: .25rem;
+}
+
+.variety-pre, .variety-post {
+  font-size: clamp(.9rem, 2.5vw, 1.3rem);
+  color: rgba(255,255,255,.5);
+  font-weight: 500;
+}
+
+.variety-num { color: #4fc3f7; }
+
+.variety-badge {
+  margin-top: 1.5rem;
+  font-size: clamp(.85rem, 2vw, 1.1rem);
+  background: rgba(255,255,255,.1);
+  border: 1px solid rgba(255,255,255,.15);
+  padding: .5rem 1.25rem;
+  border-radius: 999px;
+  color: rgba(255,255,255,.8);
+}
+
+/* ── Item slides ───────────────────────────────────────────── */
+.slide-item {
+  background: var(--slide-color, #1d3557);
+  text-align: center;
+}
+
+/* Rank — drops in from above the slide (clipped by overflow:hidden on .slide) */
+.rank-number {
+  position: absolute;
+  top: 1.25rem;
+  left: 1.5rem;
+  font-size: clamp(3.5rem, 12vw, 8rem);
+  font-weight: 900;
+  opacity: 0;              /* start invisible; animation sets final opacity */
+  line-height: 1;
+  color: #fff;
+}
+
+@keyframes rankDrop {
+  from { transform: translateY(-80px); opacity: 0; }
+  to   { transform: translateY(0);     opacity: .18; }
+}
+
+@keyframes nameSlideIn {
+  from { transform: translateY(30px); opacity: 0; }   /* vertical only — no horizontal overflow */
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+@keyframes subtitleFade {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes badgePop {
+  from { opacity: 0; transform: scale(.8); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.slide.active .rank-number {
+  animation: rankDrop .55s cubic-bezier(.34, 1.56, .64, 1) .1s both;
+}
+.slide.active .item-name {
+  animation: nameSlideIn .6s cubic-bezier(.34, 1.56, .64, 1) .25s both;
+}
+.slide.active .item-subtitle {
+  animation: subtitleFade .45s ease .45s both;
+}
+.slide.active .item-badge {
+  animation: badgePop .4s cubic-bezier(.34, 1.56, .64, 1) .6s both;
+}
+
+.item-name {
+  font-size: clamp(2.2rem, 7vw, 6rem);
+  font-weight: 800;
+  text-align: center;
+  color: #fff;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  max-width: 85vw;
+}
+
+.item-subtitle {
+  font-size: clamp(.9rem, 2.5vw, 1.4rem);
+  color: rgba(255,255,255,.7);
+  margin-top: 1rem;
+}
+
+.item-subtitle strong { color: #fff; font-size: 1.15em; }
+
+.item-badge {
+  margin-top: 1.25rem;
+  font-size: clamp(.8rem, 2vw, 1rem);
+  background: rgba(255,255,255,.15);
+  border: 1px solid rgba(255,255,255,.2);
+  padding: .4rem 1.1rem;
+  border-radius: 999px;
+  color: rgba(255,255,255,.9);
+}
+
+/* ── Money Spent slide ─────────────────────────────────────── */
+.slide-spend {
+  background: linear-gradient(145deg, #1b4332 0%, #081c15 100%);
+  text-align: center;
+}
+
+.spend-big {
+  color: #52b788;
+}
+
+/* ── CFA / Tacos / Dr. Jack's slides ───────────────────────── */
+.slide-cfa     { background: linear-gradient(145deg, #c1121f 0%, #6a040f 100%); text-align: center; gap: .5rem; }
+.slide-tacos   { background: linear-gradient(145deg, #7c3c02 0%, #1a0900 100%); text-align: center; gap: .5rem; }
+.slide-drjacks { background: linear-gradient(145deg, #3d1c02 0%, #0d0800 100%); text-align: center; gap: .5rem; }
+
+.cfa-logo {
+  font-size: clamp(3rem, 10vw, 6rem);
+  line-height: 1;
+  margin-bottom: .25rem;
+}
+
+.cfa-title {
+  font-size: clamp(2.5rem, 8vw, 6rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: #fff;
+}
+
+.cfa-stat {
+  font-size: clamp(.9rem, 2.5vw, 1.3rem);
+  color: rgba(255,255,255,.65);
+  margin-top: .75rem;
+}
+
+.slide.active .cfa-logo    { animation: badgePop .5s cubic-bezier(.34, 1.56, .64, 1) .1s both; }
+.slide.active .cfa-title   { animation: nameSlideIn .6s cubic-bezier(.34, 1.56, .64, 1) .25s both; }
+.slide.active .cfa-stat    { animation: subtitleFade .45s ease .45s both; }
+.slide.active .item-badge  { animation: badgePop .4s cubic-bezier(.34, 1.56, .64, 1) .6s both; }
+
+/* ── Comparison slide ──────────────────────────────────────── */
+.slide-compare {
+  background: linear-gradient(155deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  text-align: center;
+  gap: .4rem;
+}
+
+.pct-sup {
+  font-size: .45em;
+  vertical-align: super;
+  opacity: .7;
+}
+
+.compare-sub {
+  font-size: clamp(.8rem, 2vw, 1rem);
+  color: rgba(255,255,255,.45);
+  margin-top: .25rem;
+}
+
+.compare-sub strong { color: rgba(255,255,255,.75); }
+
+/* ── Outro ─────────────────────────────────────────────────── */
+.slide-outro {
+  background: radial-gradient(ellipse at 70% 60%, #1a1a2e 0%, #0a0a0a 70%);
+  text-align: center;
+  gap: 1rem;
+}
+
+.outro-title {
+  font-size: clamp(2rem, 7vw, 5rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: #fff;
+}
+
+.outro-sub {
+  color: rgba(255,255,255,.4);
+  font-size: clamp(.9rem, 2vw, 1.1rem);
+}
+
+.outro-links {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+/* ── Navigation dots ───────────────────────────────────────── */
+.nav-dots {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: .4rem;
+  z-index: 100;
+  pointer-events: all;
+  max-width: 90vw;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.nav-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.2);
+  border: none;
+  cursor: pointer;
+  transition: background .3s, transform .3s;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.nav-dot.active {
+  background: #fff;
+  transform: scale(1.6);
+}
+
+/* ── Share card (off-screen, captured by html2canvas) ──────── */
+#share-card {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  width: 1080px;
+  height: 1080px;
+  background: #0d0d0d;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  padding: 88px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Big decorative circle behind title */
+#share-card::before {
+  content: '';
+  position: absolute;
+  top: -220px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 860px;
+  height: 860px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #e63946 0%, transparent 70%);
+  opacity: .18;
+  pointer-events: none;
+}
+
+.sc-eyebrow {
+  font-size: 22px;
+  font-weight: 600;
+  color: #e63946;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+
+.sc-title-wrap {
+  text-align: center;
+  line-height: .92;
+  margin-bottom: 64px;
+}
+
+.sc-title-top {
+  display: block;
+  font-size: 108px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: #ffffff;
+}
+
+.sc-title-bot {
+  display: block;
+  font-size: 108px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: #e63946;
+}
+
+.sc-items {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.sc-item {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  border-radius: 18px;
+  padding: 22px 36px;
+}
+
+.sc-item:nth-child(1) { background: rgba(230,57,70,.18);  border: 1.5px solid rgba(230,57,70,.5); }
+.sc-item:nth-child(2) { background: rgba(255,255,255,.07); border: 1.5px solid rgba(255,255,255,.14); }
+.sc-item:nth-child(3) { background: rgba(255,255,255,.04); border: 1.5px solid rgba(255,255,255,.09); }
+
+.sc-rank {
+  font-size: 22px;
+  font-weight: 900;
+  flex-shrink: 0;
+  width: 48px;
+  text-align: center;
+}
+
+.sc-item:nth-child(1) .sc-rank { color: #e63946; }
+.sc-item:nth-child(2) .sc-rank { color: rgba(255,255,255,.4); }
+.sc-item:nth-child(3) .sc-rank { color: rgba(255,255,255,.25); }
+
+.sc-name {
+  font-size: 34px;
+  font-weight: 700;
+  color: #fff;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sc-spend {
+  font-size: 26px;
+  font-weight: 600;
+  color: rgba(255,255,255,.45);
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.sc-item:nth-child(2) .sc-name,
+.sc-item:nth-child(3) .sc-name { color: rgba(255,255,255,.75); }
+
+.sc-footer {
+  margin-top: 52px;
+  font-size: 20px;
+  color: rgba(255,255,255,.2);
+  letter-spacing: .08em;
+}
+
+/* ── ESC hint ──────────────────────────────────────────────── */
+.wrapped-container::after {
+  content: 'ESC · exit';
+  position: fixed;
+  top: 1rem;
+  right: 1.25rem;
+  font-size: .68rem;
+  color: rgba(255,255,255,.18);
+  letter-spacing: .07em;
+  pointer-events: none;
+}

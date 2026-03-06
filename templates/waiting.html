@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}OBU Stu Wrapped — Generating…{% endblock %}
+
+{% block content %}
+<main class="waiting-page">
+  <div class="waiting-inner">
+
+    <div class="spinner" id="spinner"></div>
+
+    <p class="waiting-status" id="status-msg">{{ job.message }}</p>
+
+    <div class="progress-track">
+      <div class="progress-fill" id="progress-fill"
+           style="width: {{ (job.step / job.total_steps * 100) | int }}%"></div>
+    </div>
+
+    <p class="waiting-step">
+      Step <span id="step-num">{{ job.step }}</span> of {{ job.total_steps }}
+    </p>
+
+    <!-- Error box (hidden until error) -->
+    <div class="error-box" id="error-box" style="display:none">
+      <strong>Something went wrong</strong>
+      <p id="error-msg"></p>
+      <a href="{{ url_for('index') }}" class="btn-secondary">Start over</a>
+    </div>
+
+  </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const JOB_ID = {{ job.job_id | tojson }};
+  const TOTAL_STEPS = {{ job.total_steps }};
+</script>
+<script src="{{ url_for('static', filename='js/poll.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,9 @@
+.git
+.gitignore
+.claude
+.env
+__pycache__/
+*.pyc
+*.pyo
+scraper.log
+data/stats.json

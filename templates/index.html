@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}OBU Stu Wrapped — See your semester in snacks{% endblock %}
+
+{% block content %}
+<main class="hero">
+  <div class="hero__inner">
+    <h1 class="hero__title">OBU Stu Wrapped</h1>
+    <p class="hero__tagline">See your semester in snacks</p>
+
+    <form class="card form-card" method="POST" action="{{ url_for('start') }}" id="start-form">
+      <h2 class="form-card__heading">Get started</h2>
+
+      <div class="steps-list">
+        <div class="step-item">
+          <span class="step-num">1</span>
+          <div class="step-body">
+            <label class="step-desc" for="obu-sid">Enter your student ID:</label>
+            <input
+              type="text"
+              id="obu-sid"
+              name="student_id"
+              placeholder="e.g. 10123"
+              inputmode="numeric"
+              autocomplete="off"
+              required
+              class="email-input"
+            >
+            <p class="email-hint" id="email-hint" style="display:none"></p>
+            <div class="plus-address-row" id="plus-address-row" style="display:none; margin-top: 0.75rem;">
+              <code class="plus-address-code" id="plus-addr-text"></code>
+              <button type="button" class="btn-copy" id="copy-btn" onclick="copyAddr()">Copy</button>
+            </div>
+          </div>
+        </div>
+        <div class="step-item">
+          <span class="step-num">2</span>
+          <div class="step-body">
+            <p class="step-desc">Add that email to your Flex Bucks account so we can read your dining history. <em>Only needs to be done once.</em></p>
+            <a href="https://connectobu.atriumcampus.com/guestaccess.php"
+               target="_blank" rel="noopener" class="btn-secondary btn-sm">
+              Open Flex Bucks ↗
+            </a>
+          </div>
+        </div>
+        <div class="step-item">
+          <span class="step-num">3</span>
+          <div class="step-body">
+            <p class="step-desc">Hit <strong>Generate</strong> and we'll take care of the rest!</p>
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-primary" style="margin-top: 1.5rem;" id="submit-btn" disabled>
+        Generate My Wrapped <span class="btn-arrow">→</span>
+      </button>
+    </form>
+  </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const sidInput    = document.getElementById('obu-sid');
+  const addrRow     = document.getElementById('plus-address-row');
+  const addrText    = document.getElementById('plus-addr-text');
+  const emailHint   = document.getElementById('email-hint');
+  const submitBtn   = document.getElementById('submit-btn');
+  let debounceTimer = null;
+
+  function copyAddr() {
+    const text = addrText.textContent.trim();
+    navigator.clipboard.writeText(text).then(function() {
+      const btn = document.getElementById('copy-btn');
+      btn.textContent = 'Copied!';
+      setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+    });
+  }
+
+  function fetchAddress(sid) {
+    fetch('/address?student_id=' + encodeURIComponent(sid))
+      .then(r => r.json())
+      .then(data => {
+        if (data.plus_address) {
+          addrText.textContent = data.plus_address;
+          addrRow.style.display = '';
+          emailHint.style.display = 'none';
+          submitBtn.disabled = false;
+        } else {
+          addrRow.style.display = 'none';
+          emailHint.textContent = data.error || 'Enter your numeric OBU student ID';
+          emailHint.style.display = '';
+          submitBtn.disabled = true;
+        }
+      })
+      .catch(() => {
+        addrRow.style.display = 'none';
+        submitBtn.disabled = true;
+      });
+  }
+
+  sidInput.addEventListener('input', function() {
+    clearTimeout(debounceTimer);
+    const val = this.value.trim();
+    if (!val) {
+      addrRow.style.display = 'none';
+      emailHint.style.display = 'none';
+      submitBtn.disabled = true;
+      return;
+    }
+    debounceTimer = setTimeout(() => fetchAddress(val), 300);
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,10 @@
+.env
+scraper.log
+__pycache__/
+*.pyc
+*.pyo
+statement.html
+caf_wrapped.csv
+caf_wrapped.json
+data/stats.json
+.claude

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Your OBU Stu Wrapped — Dashboard{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+{% endblock %}
+
+{% block content %}
+<main class="dashboard">
+
+  <header class="dash-header">
+    <div>
+      <h1 class="dash-title">Your OBU Stu Wrapped</h1>
+      <p class="dash-subtitle">{{ metadata.startdate }} → {{ metadata.enddate }}</p>
+    </div>
+    <div class="dash-actions">
+      <a href="{{ url_for('wrapped', job_id=job_id) }}" class="btn-primary">View Slideshow →</a>
+      <a href="{{ url_for('download_csv', job_id=job_id) }}" class="btn-secondary">Download CSV</a>
+    </div>
+  </header>
+
+  <!-- Stat cards -->
+  <div class="stat-row">
+    <div class="stat-card">
+      <span class="stat-card__num">{{ total_qty }}</span>
+      <span class="stat-card__label">Total Items Ordered</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-card__num">${{ "%.2f"|format(total_spend) }}</span>
+      <span class="stat-card__label">Total Spent</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-card__num">{{ unique_items }}</span>
+      <span class="stat-card__label">Unique Menu Items</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-card__num stat-card__num--sm">{{ items[0].name if items else '—' }}</span>
+      <span class="stat-card__label">#1 Most Ordered</span>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <section class="chart-section card">
+    <h2 class="section-title">Top 15 Items</h2>
+    <div class="chart-wrap">
+      <canvas id="topItemsChart"></canvas>
+    </div>
+  </section>
+
+  <!-- Sortable table -->
+  <section class="table-section card">
+    <div class="table-header-row">
+      <h2 class="section-title">All Items</h2>
+      <input type="text" id="table-search" class="search-input"
+             placeholder="Filter items…" autocomplete="off">
+    </div>
+    <div class="table-wrap">
+      <table id="items-table">
+        <thead>
+          <tr>
+            <th data-col="rank" class="sortable">Rank <span class="sort-icon">↕</span></th>
+            <th data-col="name" class="sortable">Item <span class="sort-icon">↕</span></th>
+            <th data-col="qty" class="sortable">Times Ordered <span class="sort-icon">↕</span></th>
+            <th data-col="total_spend" class="sortable">Total Spent <span class="sort-icon">↕</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+          <tr>
+            <td>{{ item.rank }}</td>
+            <td>{{ item.name }}</td>
+            <td>{{ item.qty }}</td>
+            <td>${{ "%.2f"|format(item.total_spend) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  const ITEMS = {{ items_json | safe }};
+</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

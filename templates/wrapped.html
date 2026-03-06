@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}Your OBU Stu Wrapped{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/wrapped.css') }}">
+{% endblock %}
+
+{% block content %}
+
+{# Count all slides that will render #}
+{% set total_slides = 4
+   + items | length
+   + (1 if cfa_qty > 0 else 0)
+   + (1 if tacos_qty > 0 else 0)
+   + (1 if drjacks_qty > 0 else 0)
+   + (1 if total_runs >= 2 else 0)
+%}
+
+<div class="wrapped-container">
+
+  <!-- Dashboard shortcut (always visible) -->
+  <a href="{{ dashboard_url }}" class="wrapped-dash-btn">Dashboard ↗</a>
+
+  <!-- Dot navigation -->
+  <div class="nav-dots" id="nav-dots">
+    {% for i in range(total_slides) %}
+    <button class="nav-dot{% if i == 0 %} active{% endif %}"
+            data-index="{{ i }}" aria-label="Slide {{ i + 1 }}"></button>
+    {% endfor %}
+  </div>
+
+  <!-- ── 0: Intro ──────────────────────────────────────────── -->
+  <div class="slide slide-intro active" data-index="0">
+    <p class="intro-eyebrow">{{ semester_label }}</p>
+    <h1 class="intro-title">Your OBU Stu<br>Wrapped</h1>
+    <p class="intro-hint">Tap · swipe · or press →</p>
+  </div>
+
+  <!-- ── 1: Money Spent ────────────────────────────────────── -->
+  <div class="slide slide-spend" data-index="1">
+    <p class="stats-label">This semester you spent</p>
+    <p class="stats-big spend-big">${{ "%.2f"|format(total_spend) }}</p>
+    <p class="stats-label">on campus dining</p>
+  </div>
+
+  <!-- ── 2: Total + weekly rate ────────────────────────────── -->
+  <div class="slide slide-stats" data-index="2">
+    <p class="stats-label">You ordered</p>
+    <p class="stats-big">{{ total_qty }}</p>
+    <p class="stats-label">items this semester</p>
+    <p class="stats-divider">—</p>
+    <p class="stats-sub">That's <strong>{{ items_per_week }}</strong> items every week</p>
+  </div>
+
+  <!-- ── 3: Variety ───────────────────────────────────────── -->
+  <div class="slide slide-variety" data-index="3">
+    <p class="variety-pre">You tried</p>
+    <p class="stats-big variety-num">{{ unique_items }}</p>
+    <p class="variety-post">unique dishes</p>
+    {% if unique_items >= 30 %}
+      <p class="variety-badge">🧭 Adventurous eater</p>
+    {% elif unique_items >= 15 %}
+      <p class="variety-badge">🍽️ Well-rounded</p>
+    {% else %}
+      <p class="variety-badge">🎯 Creature of habit</p>
+    {% endif %}
+  </div>
+
+  <!-- ── 4…N+3: Top items ──────────────────────────────────── -->
+  {% set colors = ["#c1121f","#1d3557","#2a9d8f","#7b2d8b","#e76f51","#264653","#0096c7","#6d6875","#b5838d","#588157"] %}
+  {% for item in items %}
+  <div class="slide slide-item" data-index="{{ loop.index + 3 }}"
+       style="--slide-color: {{ colors[(loop.index0) % colors|length] }};">
+    <span class="rank-number">#{{ item.rank }}</span>
+    <h2 class="item-name">{{ item.name }}</h2>
+    <p class="item-subtitle">
+      ordered <strong>{{ item.qty }}</strong> time{{ 's' if item.qty != 1 else '' }}
+      &nbsp;·&nbsp; <strong>${{ "%.2f"|format(item.total_spend) }}</strong> spent
+    </p>
+    {% if loop.first %}
+      <p class="item-badge">Your #1 obsession 🏆</p>
+    {% elif loop.index == 2 %}
+      <p class="item-badge">Close second 🥈</p>
+    {% elif loop.index == 3 %}
+      <p class="item-badge">Reliable go-to 🥉</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <!-- ── CFA slide (conditional) ──────────────────────────── -->
+  {% if cfa_qty > 0 %}
+  {% set cfa_index = items | length + 4 %}
+  <div class="slide slide-cfa" data-index="{{ cfa_index }}">
+    <p class="cfa-logo">🐔</p>
+    <h2 class="cfa-title">Chick-fil-A<br>stan</h2>
+    <p class="cfa-stat">{{ cfa_qty }} items · ${{ "%.2f"|format(cfa_spend) }} spent</p>
+    {% if cfa_qty >= 20 %}
+      <p class="item-badge">Eat Mor Chikin 🐄</p>
+    {% elif cfa_qty >= 10 %}
+      <p class="item-badge">My pleasure 😇</p>
+    {% else %}
+      <p class="item-badge">Getting there...</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- ── Tacos for Life slide (conditional) ───────────────── -->
+  {% if tacos_qty > 0 %}
+  {% set tacos_index = items | length + 4 + (1 if cfa_qty > 0 else 0) %}
+  <div class="slide slide-tacos" data-index="{{ tacos_index }}">
+    <p class="cfa-logo">🌮</p>
+    <h2 class="cfa-title">Tacos for<br>Life fan</h2>
+    <p class="cfa-stat">{{ tacos_qty }} items · ${{ "%.2f"|format(tacos_spend) }} spent</p>
+    {% if tacos_qty >= 20 %}
+      <p class="item-badge">Certified taco addict 🌶️</p>
+    {% elif tacos_qty >= 10 %}
+      <p class="item-badge">Living the taco life 🤘</p>
+    {% else %}
+      <p class="item-badge">A taco a day... 🌮</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- ── Dr. Jack's slide (conditional) ──────────────────── -->
+  {% if drjacks_qty > 0 %}
+  {% set drjacks_index = items | length + 4 + (1 if cfa_qty > 0 else 0) + (1 if tacos_qty > 0 else 0) %}
+  <div class="slide slide-drjacks" data-index="{{ drjacks_index }}">
+    <p class="cfa-logo">☕</p>
+    <h2 class="cfa-title">Dr. Jack's<br>regular</h2>
+    <p class="cfa-stat">{{ drjacks_qty }} items · ${{ "%.2f"|format(drjacks_spend) }} spent</p>
+    {% if drjacks_qty >= 30 %}
+      <p class="item-badge">Caffeine dependency confirmed ☕</p>
+    {% elif drjacks_qty >= 15 %}
+      <p class="item-badge">Coffee connoisseur 🏅</p>
+    {% else %}
+      <p class="item-badge">Occasional coffee drinker</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- ── Comparison slide (conditional, needs ≥2 users) ────── -->
+  {% if total_runs >= 2 %}
+  {% set cmp_index = total_slides - 2 %}
+  <div class="slide slide-compare" data-index="{{ cmp_index }}">
+    <p class="stats-label">vs. other OBU students</p>
+    {% if pct_rank is not none %}
+      <p class="stats-big">{{ pct_rank }}<span class="pct-sup">%</span></p>
+      <p class="stats-label">
+        You ordered more than {{ pct_rank }}% of users
+      </p>
+    {% endif %}
+    {% if avg_qty %}
+    <p class="compare-sub">
+      Avg items: <strong>{{ avg_qty }}</strong> &nbsp;·&nbsp; You: <strong>{{ total_qty }}</strong>
+    </p>
+    {% endif %}
+    {% if avg_spend %}
+    <p class="compare-sub">
+      Avg spend: <strong>${{ "%.2f"|format(avg_spend) }}</strong> &nbsp;·&nbsp; You: <strong>${{ "%.2f"|format(total_spend) }}</strong>
+    </p>
+    {% endif %}
+    {% if total_all_spend %}
+    <p class="compare-sub compare-total-spend">
+      OBU students have spent <strong>${{ "%.2f"|format(total_all_spend) }}</strong> total
+    </p>
+    {% endif %}
+    {% if most_common_top %}
+    <p class="compare-sub" style="margin-top:.5rem">
+      Most popular #1 campus-wide: <strong>{{ most_common_top }}</strong>
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- ── Outro ─────────────────────────────────────────────── -->
+  <div class="slide slide-outro" data-index="{{ total_slides - 1 }}">
+    <h2 class="outro-title">That's your<br>OBU Stu Wrapped!</h2>
+    <p class="outro-sub">See you next semester.</p>
+    <div class="outro-links">
+      <button class="btn-primary" id="save-img-btn">Save Image 📸</button>
+      <a href="{{ dashboard_url }}" class="btn-secondary">Dashboard ↗</a>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Share card (off-screen, captured by html2canvas) ─── -->
+<div id="share-card">
+  <div class="sc-eyebrow">{{ semester_label }}</div>
+  <div class="sc-title-wrap">
+    <span class="sc-title-top">OBU Stu</span>
+    <span class="sc-title-bot">Wrapped</span>
+  </div>
+  <div class="sc-items">
+    {% for item in items %}
+    <div class="sc-item">
+      <span class="sc-rank">#{{ item.rank }}</span>
+      <span class="sc-name">{{ item.name }}</span>
+      <span class="sc-spend">${{ "%.2f"|format(item.total_spend) }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="sc-footer">obu.edu · dining</div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
+        integrity="sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+  const DASHBOARD_URL = {{ dashboard_url | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/wrapped.js') }}"></script>
+{% endblock %}
