@@ -7,7 +7,7 @@ NAME_MAP: dict[str, str] = {
     "32 oz fou": "32 oz Fountain Drink",
     "22 oz fountain drink": "22 oz Fountain Drink",
     "22 oz foun": "22 oz Fountain Drink",
-    "fontn hot chocolt": "Fountain Hot Chocolate",
+    "fontn hot chocolt": "Hot Chocolate",
 
     # CFA sandwiches / combos
     "cfa sand": "CFA Sandwich",
@@ -32,18 +32,19 @@ NAME_MAP: dict[str, str] = {
     "24oz paradise punch": "24 oz Paradise Punch",
     "arnold palmer lg": "Arnold Palmer Large",
     "drag fruit berry": "Dragon Fruit Berry",
-    "mango pop boba": "Mango Pop Boba",
+    "mango pop boba": "Mango Boba",
     "fruit chille": "Fruit Chiller Large",
     "fruit chiller large": "Fruit Chiller Large",
 
     # Tacos 4 Life
-    "cbr quesadilla": "CBR Quesadilla",
+    "cbr quesadilla": "Chicken Bacon Ranch Quesadilla",
     "grilld chickn qusdil": "Grilled Chicken Quesadilla",
     "guac and chips sm": "Guac and Chips (Small)",
 
     # Dr. Jack's
-    "hb scramble bowl": "HB Scramble Bowl",
+    "hb scramble bowl": "Hashbrown Scramble Bowl",
     "refuel": "ReFuel",
+    
 }
 
 

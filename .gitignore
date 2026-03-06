@@ -6,5 +6,5 @@ __pycache__/
 statement.html
 caf_wrapped.csv
 caf_wrapped.json
-data/stats.json
+data/
 .claude
