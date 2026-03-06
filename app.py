@@ -112,7 +112,7 @@ def index():
 @app.get("/address")
 def address():
     sid = request.args.get("student_id", "").strip()
-    if not sid.isdigit() or len(sid) < 4:
+    if not sid.isdigit() or len(sid) != 5:
         return jsonify({"error": "Enter your numeric OBU student ID"}), 400
     return jsonify({"plus_address": make_plus_address(sid)})
 
