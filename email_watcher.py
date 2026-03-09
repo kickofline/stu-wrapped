@@ -16,7 +16,7 @@ EMAIL_TIMEOUT = 300       # 5 minutes before giving up
 def make_plus_address(student_id: str) -> str:
     """Stable plus address derived from the user's OBU student ID (same ID → same address)."""
     h = hashlib.sha256(student_id.strip().encode()).hexdigest()[:8]
-    return f"cafwrapped+{h}@drew.place"
+    return f"cafwrapped+{h}@wrapped.drew.place"
 
 
 def _get_text_body(msg) -> str:
