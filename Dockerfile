@@ -18,7 +18,7 @@ COPY pyproject.toml uv.lock* ./
 RUN /root/.local/bin/uv sync --frozen --no-dev
 
 # Install Playwright's Chromium browser and its OS dependencies
-RUN playwright install chromium --with-deps
+RUN /root/.local/bin/uv run playwright install chromium --with-deps
 
 # Copy application source
 COPY . .
@@ -30,4 +30,4 @@ ENV PORT=8000
 EXPOSE 8000
 
 # 1 worker, 8 threads — jobs are in-memory so multiple workers would lose state
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 8 --timeout 120 app:app"]
+CMD [".venv/bin/gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "8", "--timeout", "120", "app:app"]
