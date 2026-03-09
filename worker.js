@@ -10,8 +10,31 @@ export default {
     const to = message.to;
     console.log(`[WORKER] From: ${from}, To: ${to}`);
 
-    const raw = await message.raw();
-    const text = raw.toString();
+    // Get email content from message
+    let text = "";
+    try {
+      // Try to get raw content as a stream
+      if (message.raw) {
+        const reader = message.raw.getReader();
+        const chunks = [];
+        let result;
+        while (!(result = await reader.read()).done) {
+          chunks.push(result.value);
+        }
+        const buffer = new Uint8Array(chunks.reduce((a, b) => a.concat(Array.from(b)), []));
+        text = new TextDecoder().decode(buffer);
+      } else if (message.text) {
+        // Fallback: try the text property
+        text = await message.text();
+      } else {
+        console.log("[WORKER] ERROR: Cannot access email content");
+        return;
+      }
+    } catch (e) {
+      console.log(`[WORKER] ERROR: Failed to read email: ${e.message}`);
+      return;
+    }
+
     console.log(`[WORKER] Email body length: ${text.length} chars`);
 
     // Extract job_id from email address (cafwrapped+{8hex}@wrapped.drew.place)
