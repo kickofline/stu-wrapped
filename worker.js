@@ -5,58 +5,72 @@
 
 export default {
   async email(message, env, ctx) {
+    console.log("[WORKER] Email received");
     const from = message.from;
     const to = message.to;
+    console.log(`[WORKER] From: ${from}, To: ${to}`);
+
     const raw = await message.raw();
     const text = raw.toString();
+    console.log(`[WORKER] Email body length: ${text.length} chars`);
 
     // Extract job_id from email address (cafwrapped+{8hex}@wrapped.drew.place)
     const match = to.match(/cafwrapped\+([a-f0-9]{8})@/i);
     if (!match) {
-      console.log("No job ID found in recipient:", to);
+      console.log("[WORKER] ERROR: No job ID found in recipient:", to);
       return;
     }
 
     const jobId = match[1];
-    console.log(`Processing credentials for job ${jobId}`);
+    console.log(`[WORKER] Extracted job ID: ${jobId}`);
 
     // Extract username and password from email body
+    console.log("[WORKER] Extracting credentials...");
     const creds = extractCredentials(text);
     if (!creds) {
-      console.log("Could not extract credentials from email");
+      console.log("[WORKER] ERROR: Could not extract credentials from email");
       return;
     }
 
     const { username, password, name } = creds;
-    console.log(`Extracted credentials for ${name || username}`);
+    console.log(`[WORKER] Extracted: name=${name}, username=${username}`);
 
     // POST to app
     const appUrl = env.APP_URL || "https://cafwrapped.drew.place";
+    const secret = env.CREDENTIAL_SECRET || "";
+    console.log(`[WORKER] Posting to ${appUrl}/api/credentials`);
+    console.log(`[WORKER] APP_URL env: ${env.APP_URL}`);
+    console.log(`[WORKER] CREDENTIAL_SECRET env: ${secret ? "set" : "NOT SET"}`);
+
     try {
+      const payload = {
+        job_id: jobId,
+        username,
+        password,
+        name,
+      };
+      console.log(`[WORKER] Payload: ${JSON.stringify(payload)}`);
+
       const response = await fetch(`${appUrl}/api/credentials`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Credential-Secret": env.CREDENTIAL_SECRET || "",
+          "X-Credential-Secret": secret,
         },
-        body: JSON.stringify({
-          job_id: jobId,
-          username,
-          password,
-          name,
-        }),
+        body: JSON.stringify(payload),
       });
 
+      console.log(`[WORKER] Response status: ${response.status}`);
+
       if (response.ok) {
-        console.log(`Successfully posted credentials for job ${jobId}`);
+        console.log(`[WORKER] SUCCESS: Posted credentials for job ${jobId}`);
       } else {
-        console.error(
-          `Failed to post credentials: ${response.status}`,
-          await response.text()
-        );
+        const errorText = await response.text();
+        console.log(`[WORKER] ERROR: POST failed with status ${response.status}: ${errorText}`);
       }
     } catch (error) {
-      console.error("Error posting credentials:", error);
+      console.log(`[WORKER] ERROR: Exception during POST: ${error.message}`);
+      console.log(`[WORKER] Stack: ${error.stack}`);
     }
   },
 };
