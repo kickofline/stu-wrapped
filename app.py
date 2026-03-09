@@ -13,7 +13,7 @@ from flask import (Flask, Response, flash, jsonify, redirect,
 load_dotenv()
 
 from email_watcher import make_plus_address
-from jobs import cleanup_old_jobs, create_job, get_job
+from jobs import cleanup_old_jobs, create_job, get_job, set_credentials
 from name_map import expand_name
 from scraper import run_scrape_job
 
@@ -305,6 +305,29 @@ def download_csv(job_id):
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=stu_wrapped.csv"},
     )
+
+
+@app.post("/api/credentials")
+def api_credentials():
+    """Receive credentials from Cloudflare Email Worker."""
+    secret = os.environ.get("CREDENTIAL_SECRET", "")
+    provided_secret = request.headers.get("X-Credential-Secret", "")
+
+    if secret and provided_secret != secret:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = request.get_json()
+    if not data or "job_id" not in data or "username" not in data or "password" not in data:
+        return jsonify({"error": "missing fields"}), 400
+
+    job_id = data["job_id"]
+    username = data["username"]
+    password = data["password"]
+
+    set_credentials(job_id, username, password)
+    print(f"[api] Received credentials for job={job_id}", flush=True)
+
+    return jsonify({"success": True}), 200
 
 
 if __name__ == "__main__":

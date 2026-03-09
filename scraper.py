@@ -1,4 +1,5 @@
 import sys
+import time
 import traceback
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs, urlencode
@@ -13,6 +14,39 @@ def _log(*args):
 LOGIN_URL = "https://studentlink.atriumcampus.com/login.php?guest=1&cid=410"
 STATEMENT_BASE = "https://connectobu.atriumcampus.com/statementdetail.php"
 CID = "410"
+CREDENTIAL_TIMEOUT = 300  # 5 minutes
+
+
+def wait_for_credentials(job_id, progress_callback):
+    """
+    Wait for credentials to be POSTed from Cloudflare Email Worker.
+    Polls every 2 seconds for up to CREDENTIAL_TIMEOUT seconds.
+    Returns (username, password) on success, raises TimeoutError otherwise.
+    """
+    from jobs import get_credentials
+
+    start_time = time.time()
+    poll_count = 0
+
+    while True:
+        elapsed = int(time.time() - start_time)
+        if elapsed >= CREDENTIAL_TIMEOUT:
+            raise TimeoutError(
+                f"Didn't receive Flex Bucks access email after {CREDENTIAL_TIMEOUT // 60} minutes. "
+                "Make sure you added the correct email in step 2 and try again."
+            )
+
+        mins, secs = divmod(elapsed, 60)
+        time_str = f"{mins}m {secs:02d}s" if mins else f"{secs}s"
+        step = 2 if poll_count < 5 else 3
+        progress_callback(step, f"Waiting for Flex Bucks access... ({time_str} elapsed)")
+
+        creds = get_credentials(job_id)
+        if creds:
+            return creds["username"], creds["password"]
+
+        poll_count += 1
+        time.sleep(2)
 
 
 def extract_skey(url):
@@ -198,17 +232,14 @@ def run_scrape_job_with_skey(job_id, startdate, enddate, skey, acct="1", login_u
 
 def run_scrape_job(job_id, startdate, enddate, plus_address, acct="1"):
     from jobs import update_job_progress, complete_job, fail_job
-    from email_watcher import poll_for_credential_email
     browser = None
     try:
         update_job_progress(job_id, 1, "Connecting to your Flex Bucks account...")
-        job_created_at = datetime.now()
 
         def _progress(step, msg):
             update_job_progress(job_id, step, msg)
 
-        username, password = poll_for_credential_email(
-            plus_address=plus_address, after_timestamp=job_created_at, progress_callback=_progress)
+        username, password = wait_for_credentials(job_id, _progress)
         update_job_progress(job_id, 5, "Launching browser...")
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, slow_mo=0)

@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timedelta
 
 JOBS: dict = {}
+CREDENTIALS: dict = {}  # job_id -> {username, password}
 _lock = threading.Lock()
 
 def create_job(total_steps: int = 10, plus_address: str = None, job_id: str = None) -> str:
@@ -63,6 +64,21 @@ def fail_job(job_id: str, error_message: str) -> None:
             JOBS[job_id]["error"] = error_message
 
 
+def set_credentials(job_id: str, username: str, password: str) -> None:
+    """Store credentials from Cloudflare Worker."""
+    with _lock:
+        CREDENTIALS[job_id] = {
+            "username": username,
+            "password": password,
+            "received_at": datetime.now().isoformat(),
+        }
+
+
+def get_credentials(job_id: str) -> dict | None:
+    """Retrieve credentials for a job."""
+    return CREDENTIALS.get(job_id)
+
+
 def cleanup_old_jobs(max_age_hours: int = 2) -> None:
     cutoff = datetime.now() - timedelta(hours=max_age_hours)
     with _lock:
@@ -72,3 +88,4 @@ def cleanup_old_jobs(max_age_hours: int = 2) -> None:
         ]
         for jid in to_delete:
             del JOBS[jid]
+            CREDENTIALS.pop(jid, None)  # Clean up credentials too
