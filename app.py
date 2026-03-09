@@ -314,14 +314,21 @@ def download_csv(job_id):
 @app.post("/api/credentials")
 def api_credentials():
     """Receive credentials from Cloudflare Email Worker."""
+    print(f"[api] /api/credentials endpoint hit", flush=True)
+
     secret = os.environ.get("CREDENTIAL_SECRET", "")
     provided_secret = request.headers.get("X-Credential-Secret", "")
+    print(f"[api] Secret check: env_secret={'set' if secret else 'NOT SET'}, provided={'set' if provided_secret else 'NOT SET'}", flush=True)
 
     if secret and provided_secret != secret:
+        print(f"[api] ERROR: Secret mismatch!", flush=True)
         return jsonify({"error": "unauthorized"}), 401
 
     data = request.get_json()
+    print(f"[api] Request JSON: {data}", flush=True)
+
     if not data or "job_id" not in data or "username" not in data or "password" not in data:
+        print(f"[api] ERROR: Missing fields in request", flush=True)
         return jsonify({"error": "missing fields"}), 400
 
     job_id = data["job_id"]
@@ -329,22 +336,41 @@ def api_credentials():
     password = data["password"]
     name = data.get("name")
 
+    print(f"[api] Extracted: job_id={job_id}, username={username}, name={name}", flush=True)
+
     # Store in memory
-    set_credentials(job_id, username, password, name)
+    try:
+        set_credentials(job_id, username, password, name)
+        print(f"[api] Stored credentials in memory", flush=True)
+    except Exception as e:
+        print(f"[api] ERROR storing in memory: {e}", flush=True)
 
     # Also save to file
-    cred_file = os.path.join(CREDENTIALS_DIR, f"{job_id}.json")
-    with open(cred_file, "w") as f:
-        json.dump({
-            "job_id": job_id,
-            "username": username,
-            "password": password,
-            "name": name,
-            "received_at": datetime.now().isoformat(),
-        }, f)
+    try:
+        print(f"[api] CREDENTIALS_DIR: {CREDENTIALS_DIR}", flush=True)
+        print(f"[api] Directory exists: {os.path.exists(CREDENTIALS_DIR)}", flush=True)
 
-    print(f"[api] Received credentials for job={job_id} name={name or 'unknown'}, saved to {cred_file}", flush=True)
+        cred_file = os.path.join(CREDENTIALS_DIR, f"{job_id}.json")
+        print(f"[api] Writing to: {cred_file}", flush=True)
 
+        with open(cred_file, "w") as f:
+            json.dump({
+                "job_id": job_id,
+                "username": username,
+                "password": password,
+                "name": name,
+                "received_at": datetime.now().isoformat(),
+            }, f)
+
+        print(f"[api] File written successfully", flush=True)
+        print(f"[api] File exists after write: {os.path.exists(cred_file)}", flush=True)
+
+    except Exception as e:
+        print(f"[api] ERROR writing to file: {e}", flush=True)
+        import traceback
+        print(f"[api] Traceback: {traceback.format_exc()}", flush=True)
+
+    print(f"[api] SUCCESS: Received credentials for job={job_id} name={name or 'unknown'}", flush=True)
     return jsonify({"success": True}), 200
 
 
