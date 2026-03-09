@@ -9,13 +9,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.cargo/bin:$PATH"
+ENV PATH="/root/.local/bin:$PATH"
 
 # Copy project files
 COPY pyproject.toml uv.lock* ./
 
 # Install Python packages with uv
-RUN uv sync --frozen --no-dev
+RUN /root/.local/bin/uv sync --frozen --no-dev
 
 # Install Playwright's Chromium browser and its OS dependencies
 RUN playwright install chromium --with-deps
