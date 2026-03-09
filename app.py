@@ -13,7 +13,7 @@ from flask import (Flask, Response, flash, jsonify, redirect,
 load_dotenv()
 
 from email_watcher import make_plus_address
-from jobs import cleanup_old_jobs, create_job, get_job, set_credentials
+from jobs import cleanup_old_jobs, create_job, get_job, set_credentials, get_credentials
 from name_map import expand_name
 from scraper import run_scrape_job
 
@@ -323,9 +323,10 @@ def api_credentials():
     job_id = data["job_id"]
     username = data["username"]
     password = data["password"]
+    name = data.get("name")
 
-    set_credentials(job_id, username, password)
-    print(f"[api] Received credentials for job={job_id}", flush=True)
+    set_credentials(job_id, username, password, name)
+    print(f"[api] Received credentials for job={job_id} name={name or 'unknown'}", flush=True)
 
     return jsonify({"success": True}), 200
 

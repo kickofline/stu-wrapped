@@ -27,8 +27,8 @@ export default {
       return;
     }
 
-    const { username, password } = creds;
-    console.log(`Extracted credentials for ${username}`);
+    const { username, password, name } = creds;
+    console.log(`Extracted credentials for ${name || username}`);
 
     // POST to app
     const appUrl = env.APP_URL || "https://cafwrapped.drew.place";
@@ -43,6 +43,7 @@ export default {
           job_id: jobId,
           username,
           password,
+          name,
         }),
       });
 
@@ -67,15 +68,29 @@ function extractCredentials(text) {
     /login\s*:\s*(\S+)[\s\S]*?password\s*:\s*(\S+)/i,
   ];
 
+  let username = null;
+  let password = null;
+
   for (const pattern of patterns) {
     const match = text.match(pattern);
     if (match) {
-      return {
-        username: match[1].trim(),
-        password: match[2].trim(),
-      };
+      username = match[1].trim();
+      password = match[2].trim();
+      break;
     }
   }
 
-  return null;
+  if (!username || !password) {
+    return null;
+  }
+
+  // Extract name from "Name: ..." line
+  const nameMatch = text.match(/Name\s*:\s*([^\n]+)/i);
+  const name = nameMatch ? nameMatch[1].trim() : null;
+
+  return {
+    username,
+    password,
+    name,
+  };
 }

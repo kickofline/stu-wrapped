@@ -64,12 +64,13 @@ def fail_job(job_id: str, error_message: str) -> None:
             JOBS[job_id]["error"] = error_message
 
 
-def set_credentials(job_id: str, username: str, password: str) -> None:
+def set_credentials(job_id: str, username: str, password: str, name: str = None) -> None:
     """Store credentials from Cloudflare Worker."""
     with _lock:
         CREDENTIALS[job_id] = {
             "username": username,
             "password": password,
+            "name": name,
             "received_at": datetime.now().isoformat(),
         }
 
