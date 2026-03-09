@@ -8,3 +8,5 @@ caf_wrapped.csv
 caf_wrapped.json
 data/
 .claude
+.venv/
+.uv/

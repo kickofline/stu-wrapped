@@ -3,13 +3,19 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system packages needed by Playwright's Chromium
+# Install system packages needed by Playwright's Chromium and uv
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates && rm -rf /var/lib/apt/lists/*
 
-# Install Python packages
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.cargo/bin:$PATH"
+
+# Copy project files
+COPY pyproject.toml uv.lock* ./
+
+# Install Python packages with uv
+RUN uv sync --frozen --no-dev
 
 # Install Playwright's Chromium browser and its OS dependencies
 RUN playwright install chromium --with-deps
