@@ -20,8 +20,12 @@ from scraper import run_scrape_job
 app = Flask(__name__)
 app.secret_key = "LUKERMKNGAONMXXMGJYAAGYMRIVVECNV"
 
-STATS_FILE     = os.path.join(os.path.dirname(__file__), "data", "stats.json")
-RAW_ITEMS_FILE = os.path.join(os.path.dirname(__file__), "data", "raw_items.json")
+STATS_FILE       = os.path.join(os.path.dirname(__file__), "data", "stats.json")
+RAW_ITEMS_FILE   = os.path.join(os.path.dirname(__file__), "data", "raw_items.json")
+CREDENTIALS_DIR  = os.path.join(os.path.dirname(__file__), "data", "credentials")
+
+# Ensure credentials directory exists
+os.makedirs(CREDENTIALS_DIR, exist_ok=True)
 
 
 def _location_stats(transactions: list, keywords: tuple) -> tuple:
@@ -325,8 +329,21 @@ def api_credentials():
     password = data["password"]
     name = data.get("name")
 
+    # Store in memory
     set_credentials(job_id, username, password, name)
-    print(f"[api] Received credentials for job={job_id} name={name or 'unknown'}", flush=True)
+
+    # Also save to file
+    cred_file = os.path.join(CREDENTIALS_DIR, f"{job_id}.json")
+    with open(cred_file, "w") as f:
+        json.dump({
+            "job_id": job_id,
+            "username": username,
+            "password": password,
+            "name": name,
+            "received_at": datetime.now().isoformat(),
+        }, f)
+
+    print(f"[api] Received credentials for job={job_id} name={name or 'unknown'}, saved to {cred_file}", flush=True)
 
     return jsonify({"success": True}), 200
 

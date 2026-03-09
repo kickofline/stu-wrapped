@@ -20,10 +20,25 @@ CREDENTIAL_TIMEOUT = 300  # 5 minutes
 def wait_for_credentials(job_id, progress_callback):
     """
     Wait for credentials to be POSTed from Cloudflare Email Worker.
-    Polls every 2 seconds for up to CREDENTIAL_TIMEOUT seconds.
+    Checks file storage first, then polls every 2 seconds for up to CREDENTIAL_TIMEOUT seconds.
     Returns (username, password) on success, raises TimeoutError otherwise.
     """
+    import json
+    import os
     from jobs import get_credentials
+
+    credentials_dir = os.path.join(os.path.dirname(__file__), "data", "credentials")
+    cred_file = os.path.join(credentials_dir, f"{job_id}.json")
+
+    # Check if credentials file exists
+    if os.path.exists(cred_file):
+        _log(f"[scraper] Found credentials file for job {job_id}")
+        try:
+            with open(cred_file, "r") as f:
+                creds = json.load(f)
+                return creds["username"], creds["password"]
+        except Exception as e:
+            _log(f"[scraper] Error reading credentials file: {e}")
 
     start_time = time.time()
     poll_count = 0
@@ -41,9 +56,21 @@ def wait_for_credentials(job_id, progress_callback):
         step = 2 if poll_count < 5 else 3
         progress_callback(step, f"Waiting for Flex Bucks access... ({time_str} elapsed)")
 
+        # Check memory first
         creds = get_credentials(job_id)
         if creds:
+            _log(f"[scraper] Got credentials from memory for job {job_id}")
             return creds["username"], creds["password"]
+
+        # Check file
+        if os.path.exists(cred_file):
+            _log(f"[scraper] Found credentials file for job {job_id}")
+            try:
+                with open(cred_file, "r") as f:
+                    creds = json.load(f)
+                    return creds["username"], creds["password"]
+            except Exception as e:
+                _log(f"[scraper] Error reading credentials file: {e}")
 
         poll_count += 1
         time.sleep(2)
