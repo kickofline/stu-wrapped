@@ -84,8 +84,8 @@ function extractCredentials(text) {
     return null;
   }
 
-  // Extract name from "Name: ..." line
-  const nameMatch = text.match(/Name\s*:\s*([^\n]+)/i);
+  // Extract name from "Name: ..." (stop at URL or next capital word)
+  const nameMatch = text.match(/Name\s*:\s*([A-Za-z\s]+?)(?:https?:\/\/|$)/i);
   const name = nameMatch ? nameMatch[1].trim() : null;
 
   return {
