@@ -225,6 +225,48 @@ def dining_badges(transactions: list, swipes: list, metadata: dict) -> list[dict
     return [{k: badge[k] for k in ("mark", "title", "description")} for badge in chosen]
 
 
+# Tiger Express is the Caf's lunch-only grab-and-go counter: its swipes count as Caf
+# swipes, and students with at least TIGER_MINIMUM of them get a slide of their own.
+TIGER_MINIMUM = 2
+TIGER_TIERS = ((10, "Tiger Express VIP", "grab-and-go lunches. They know your order."),
+               (5, "Express Lane", "Tiger Express runs. You know the fast way."),
+               (2, "Grab & Go", "lunches grabbed at Tiger Express."))
+
+
+def tiger_express(swipes: list, metadata: dict) -> dict | None:
+    """Grab-and-go swipes at Tiger Express: count, share of Caf swipes, usual day and
+    hour, a count tier badge and (when one weekday is at least half of them) a day badge."""
+    year = date.fromisoformat(metadata["startdate"]).year
+    moments = [
+        when for swipe in swipes
+        if spot_name(swipe.get("location", "")) == "Tiger Express"
+        and (when := parse_when(swipe.get("date", ""), year))
+    ]
+    count = len(moments)
+    if count < TIGER_MINIMUM:
+        return None
+
+    badges = []
+    for minimum, title, blurb in TIGER_TIERS:
+        if count >= minimum:
+            badges.append({"mark": "TX", "title": title, "description": f"{count} {blurb}"})
+            break
+    weekdays = Counter(when.weekday() for when in moments)
+    day = max(range(7), key=lambda d: (weekdays[d], -d))
+    if weekdays[day] >= 2 and weekdays[day] * 2 >= count:
+        badges.append({"mark": WEEKDAYS[day][:3].upper(), "title": f"{WEEKDAYS[day]} Ritual",
+                       "description": f"{weekdays[day]} of your {count} Tiger Express runs were on {WEEKDAYS[day]}s."})
+
+    hours = Counter(when.hour for when in moments)
+    return {
+        "count": count,
+        "share": round(count / len(swipes) * 100),
+        "day": WEEKDAYS[day],
+        "hour": _hour_label(max(range(24), key=lambda h: (hours[h], -h))),
+        "badges": badges,
+    }
+
+
 def _percentile(values: list[float], value: float) -> dict:
     return {
         "top": max(1, round(sum(other >= value for other in values) / len(values) * 100)),

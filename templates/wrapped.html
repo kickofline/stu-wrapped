@@ -194,6 +194,27 @@
     </div></section>
     {% endif %}
 
+    <!-- ── Tiger Express (the Caf's grab-and-go; 2+ swipes) ──── -->
+    {% if tiger %}
+    <section class="slide t-orange l1"><div class="frame">
+      {{ blobs() }}
+      <div class="body center">
+        <p class="eyebrow">You grabbed lunch at Tiger Express</p>
+        <p class="display ac" style="--fs: 200">{{ tiger.count }}</p>
+        <p class="lead">times. That's {{ tiger.share }}% of your Caf swipes, usually {{ tiger.day }}s around {{ tiger.hour }}.</p>
+        <div class="badge-stack">
+          {% for badge in tiger.badges %}
+          <div class="badge-row">
+            <strong>{{ badge.mark }}</strong>
+            <div><h3>{{ badge.title }}</h3><p>{{ badge.description }}</p></div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {{ foot() }}
+    </div></section>
+    {% endif %}
+
     <!-- ── Streaks ───────────────────────────────────────────── -->
     {% if streaks %}
     {% set run = streaks.caf or streaks.food %}

@@ -20,7 +20,8 @@ import analysis
 import og_image
 from insights import parse_when, spot_name, time_insights
 from social import (campus_activity, campus_percentiles, campus_wrapped, dining_badges,
-                    dining_streaks, friend_match, signature_order, summary_highlights)
+                    dining_streaks, friend_match, signature_order, summary_highlights,
+                    tiger_express)
 from jobs import (claim, claim_waiting, cleanup_old_jobs, fail, finish, get_job,
                   job_for, update_progress)
 from mailbox import (delete_credentials, inbox_address, is_atrium_invite, is_tag,
@@ -652,6 +653,7 @@ def _wrapped_context(share_id: str) -> dict:
         "times": times,
         "swipes": swipes,
         "swipe_top_meal": max(swipes["meal_totals"], key=lambda m: m["count"])["meal"] if swipes else None,
+        "tiger": tiger_express(result.get("swipes", []), meta),
         "flex": _flex_plan(transactions, meta),
         "ai": result.get("analysis"),
         "campus": campus,

@@ -181,7 +181,10 @@ def parse_swipes(html):
         except (ValueError, IndexError):
             continue
         if value < 0:
-            swipes.append({"date": date_cell.get_text(" ", strip=True), "location": desc.get_text(" ", strip=True)})
+            # Meal exchanges at other counters ("Tiger Exp 1") carry an itemized receipt
+            # inside <details>; the location is its <summary>, not the whole cell's text.
+            label = desc.find("summary") or desc
+            swipes.append({"date": date_cell.get_text(" ", strip=True), "location": label.get_text(" ", strip=True)})
     return swipes
 
 

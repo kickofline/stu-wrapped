@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime, timedelta
 
 from social import (campus_percentiles, campus_wrapped, dining_badges, dining_streaks,
-                    friend_match, signature_order, summary_highlights)
+                    friend_match, signature_order, summary_highlights, tiger_express)
 
 
 class SocialInsightsTests(unittest.TestCase):
@@ -147,6 +147,22 @@ class SocialInsightsTests(unittest.TestCase):
         self.assertEqual(campus["busiest"]["hour"], "12 PM")
         students[0].pop("weekdays")  # runs saved before activity was stored don't count toward it
         self.assertIsNone(campus_wrapped(students)["busiest"])
+
+    def test_tiger_express_needs_two_swipes_and_badges_count_and_habit(self):
+        meta = {"startdate": "2026-07-01"}
+        caf = [{"date": f"Sep {day}, 2026 12:00PM", "location": "Commons PAX 4"} for day in range(1, 11)]
+        tiger = lambda day: {"date": f"Sep {day}, 2026 12:20PM", "location": "Tiger Exp 1"}
+        self.assertIsNone(tiger_express(caf + [tiger(1)], meta))
+        # Tuesdays Sep 1, 8, 15 plus Thursday Sep 3: 4 swipes, 3 on Tuesday.
+        info = tiger_express(caf + [tiger(d) for d in (1, 3, 8, 15)], meta)
+        self.assertEqual(info["count"], 4)
+        self.assertEqual(info["share"], 29)  # 4 of 14 Caf swipes
+        self.assertEqual((info["day"], info["hour"]), ("Tuesday", "12 PM"))
+        self.assertEqual([b["title"] for b in info["badges"]], ["Grab & Go", "Tuesday Ritual"])
+        spread = tiger_express([tiger(d) for d in range(1, 6)], meta)  # Tue-Sat, one each
+        self.assertEqual([b["title"] for b in spread["badges"]], ["Express Lane"])
+        many = tiger_express([tiger(d) for d in range(1, 11)], meta)
+        self.assertEqual(many["badges"][0]["title"], "Tiger Express VIP")
 
 
 if __name__ == "__main__":
