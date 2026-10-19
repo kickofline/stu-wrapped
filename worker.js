@@ -13,6 +13,8 @@ export default {
         "X-Envelope-To": message.to,
       },
       body: await new Response(message.raw).arrayBuffer(),
+      // A redirect means something (e.g. Cloudflare Access) intercepted the request.
+      redirect: "manual",
     });
     if (!res.ok) {
       console.log(`app returned ${res.status} for mail to ${message.to}`);
