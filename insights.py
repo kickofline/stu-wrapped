@@ -19,11 +19,14 @@ WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", 
 MEALS = (("Breakfast", 0, 10 * 60 + 30), ("Lunch", 10 * 60 + 30, 16 * 60), ("Dinner", 16 * 60, 24 * 60))
 LATE_NIGHT_CUTOFF = 4 * 60  # purchases before 4 AM count as the previous night's latest
 _REGISTER = re.compile(r"\s+(?:PAX\s+)?\d+$", re.IGNORECASE)
+# What students call each spot; the dining hall is the only place to swipe.
+_SPOT_NAMES = {"Commons": "the Caf"}
 
 
 def spot_name(location: str) -> str:
     """Atrium names each register ("CFA 2", "Commons PAX 4"); fold them into one spot."""
-    return _REGISTER.sub("", location)
+    spot = _REGISTER.sub("", location)
+    return _SPOT_NAMES.get(spot, spot)
 
 
 def parse_when(text: str, default_year: int) -> datetime | None:
@@ -90,7 +93,8 @@ def time_insights(events: list, startdate: str, enddate: str) -> dict | None:
     weekday_days = _weekday_counts(max(start, first), end)
     weekday_visits = Counter(when.weekday() for when, _ in timed)
     weekdays = [
-        {"day": WEEKDAYS[i], "avg": round(weekday_visits[i] / weekday_days[i], 1) if weekday_days[i] else 0.0}
+        {"day": WEEKDAYS[i], "total": weekday_visits[i],
+         "avg": round(weekday_visits[i] / weekday_days[i], 1) if weekday_days[i] else 0.0}
         for i in range(7)
     ]
 
@@ -109,5 +113,4 @@ def time_insights(events: list, startdate: str, enddate: str) -> dict | None:
             if counts
         ],
         "weekdays": weekdays,
-        "max_weekday_avg": max(w["avg"] for w in weekdays) or 1,
     }

@@ -21,14 +21,16 @@
   </div>
 {% endmacro %}
 
-{% macro weekday_slide(t, title) %}
+{# field: "avg" (average per weekday) or "total" (count per weekday) #}
+{% macro weekday_slide(t, title, field) %}
   <div class="slide slide-weekdays">
     <h2 class="chart-title">{{ title }}</h2>
+    {% set top = t.weekdays | map(attribute=field) | max %}
     {% for w in t.weekdays %}
     <div class="bar-row">
       <span class="bar-label">{{ w.day }}</span>
-      <span class="bar" style="--w: {{ (w.avg / t.max_weekday_avg * 100) | round(1) }}%"></span>
-      <span class="bar-value">{{ w.avg }}</span>
+      <span class="bar" style="--w: {{ (w[field] / (top or 1) * 100) | round(1) }}%"></span>
+      <span class="bar-value">{{ w[field] }}</span>
     </div>
     {% endfor %}
   </div>
@@ -159,13 +161,13 @@
   {{ clock_slide(times, "Your earliest bite", "Your latest bite") }}
 
   <!-- ── Purchases per weekday ─────────────────────────────── -->
-  {{ weekday_slide(times, "Average visits per day") }}
+  {{ weekday_slide(times, "Average visits per day", "avg") }}
   {% endif %}
 
   {% if swipes %}
-  <!-- ── Meal swipes (dining hall) ─────────────────────────── -->
+  <!-- ── Meal swipes (the Caf) ─────────────────────────────── -->
   <div class="slide slide-swipes">
-    <p class="stats-label">You swiped into the dining hall</p>
+    <p class="stats-label">You swiped into the Caf</p>
     <p class="stats-big">{{ swipes.count }}</p>
     <p class="stats-label">times this semester</p>
     {% set top_meal = swipes.meal_totals | map(attribute='count') | max %}
@@ -182,7 +184,7 @@
 
   {{ clock_slide(swipes, "Your earliest swipe", "Your latest swipe") }}
 
-  {{ weekday_slide(swipes, "Average swipes per day") }}
+  {{ weekday_slide(swipes, "Swipes by day", "total") }}
   {% endif %}
 
   <!-- ── CFA slide (conditional) ──────────────────────────── -->

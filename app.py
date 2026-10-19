@@ -295,7 +295,7 @@ def _summary(transactions: list, swipes: list, metadata: dict, label: str) -> di
         "meal_swipes": swipe_stats and {
             "total": swipe_stats["count"],
             "by_meal": {m["meal"]: m["count"] for m in swipe_stats["meal_totals"]},
-            "avg_per_weekday": {w["day"]: w["avg"] for w in swipe_stats["weekdays"]},
+            "by_weekday": {w["day"]: w["total"] for w in swipe_stats["weekdays"]},
             "earliest": swipe_stats["earliest"],
             "latest": swipe_stats["latest"],
         },
