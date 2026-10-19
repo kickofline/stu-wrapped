@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from social import (campus_percentiles, campus_wrapped, dining_badges, dining_streaks,
                     friend_match, signature_order, summary_highlights)
@@ -59,15 +59,30 @@ class SocialInsightsTests(unittest.TestCase):
             "Matcha Machine", "Caf Regular", "Night Owl",
         ])
 
-    def test_friend_meals_match_each_swipe_at_most_once(self):
-        first = datetime(2026, 10, 18, 12, 5)
-        second = datetime(2026, 10, 19, 17, 30)
+    def test_friend_meals_pair_swipes_within_two_minutes_once_each(self):
+        noon = datetime(2026, 10, 18, 12, 5)
+        dinner = datetime(2026, 10, 19, 17, 30)
         match = friend_match(
-            {"items": {"Taco": 3}, "_caf_times": [first, second]},
-            {"items": {"Taco": 1}, "_caf_times": [first, first, second]},
+            {"items": {"Taco": 3}, "_caf_times": [noon, dinner, datetime(2026, 10, 20, 8, 0)]},
+            # Two swipes near noon (only one can pair), dinner 2 min late (pairs),
+            # and one 3 min off that must not pair.
+            {"items": {"Taco": 1}, "_caf_times": [
+                noon, noon.replace(minute=6), dinner.replace(minute=32),
+                datetime(2026, 10, 20, 8, 3),
+            ]},
         )
         self.assertEqual(match["likely_meals"], 2)
-        self.assertEqual(len(match["likely_meal_times"]), 2)
+        self.assertEqual(match["likely_meal_times"], ["October 19 at 5:30 PM", "October 18 at 12:05 PM"])
+        self.assertIsNone(match["meal_title"])
+
+    def test_friend_meal_titles_start_at_ten_and_thirty(self):
+        def title(count):
+            times = [datetime(2026, 9, 1, 12) + timedelta(days=day) for day in range(count)]
+            return friend_match({"_caf_times": times}, {"_caf_times": times})["meal_title"]
+        self.assertIsNone(title(9))
+        self.assertEqual(title(10), "Caf Crew")
+        self.assertEqual(title(29), "Caf Crew")
+        self.assertEqual(title(40), "Caf Soulmates")
 
     def test_summary_highlights_replace_restaurant_rankings(self):
         transactions = [

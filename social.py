@@ -278,8 +278,13 @@ def campus_percentiles(current: dict, students: list[dict], minimum: int = 3) ->
     return [{k: insight[k] for k in ("top", "more_than", "label", "detail")} for insight in candidates[:3]]
 
 
+MEAL_WINDOW = timedelta(minutes=2)
+# (minimum shared meals, title), highest first.
+MEAL_TIERS = ((30, "Caf Soulmates"), (10, "Caf Crew"))
+
+
 def friend_match(left: dict, right: dict) -> dict:
-    """Compare aggregate profiles and one-to-one same-minute Caf arrivals."""
+    """Compare aggregate profiles and one-to-one Caf arrivals within MEAL_WINDOW."""
     left_items = left.get("items") or {}
     right_items = right.get("items") or {}
     left_names = set(left_items)
@@ -297,20 +302,34 @@ def friend_match(left: dict, right: dict) -> dict:
     else:
         vibe = "Opposite Menus"
 
-    left_times = Counter(left.get("_caf_times") or [])
-    right_times = Counter(right.get("_caf_times") or [])
-    same_minute = []
-    for when in sorted(left_times.keys() & right_times.keys(), reverse=True):
-        same_minute.extend([when] * min(left_times[when], right_times[when]))
+    # Greedy two-pointer over both sorted swipe lists: pair the earliest swipes
+    # that fall within the window, so each swipe is used at most once.
+    left_times = sorted(left.get("_caf_times") or [])
+    right_times = sorted(right.get("_caf_times") or [])
+    together = []
+    i = j = 0
+    while i < len(left_times) and j < len(right_times):
+        a, b = left_times[i], right_times[j]
+        if abs(a - b) <= MEAL_WINDOW:
+            together.append(min(a, b))
+            i += 1
+            j += 1
+        elif a < b:
+            i += 1
+        else:
+            j += 1
+    together.reverse()
+    meal_title = next((title for minimum, title in MEAL_TIERS if len(together) >= minimum), None)
 
     return {
         "compatibility": compatibility,
         "vibe": vibe,
         "shared": shared,
-        "likely_meals": len(same_minute),
+        "likely_meals": len(together),
+        "meal_title": meal_title,
         "likely_meal_times": [
             f"{when:%B} {when.day} at {when:%I:%M %p}".replace(" 0", " ")
-            for when in same_minute[:3]
+            for when in together[:3]
         ],
     }
 
