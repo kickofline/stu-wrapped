@@ -51,11 +51,11 @@
 
     {% if match.likely_meals %}
     <section class="caf-buddy card">
-      <p class="card-label">Likely ate together</p>
+      <p class="card-label">Ate together</p>
       <strong>{{ match.likely_meals }}</strong>
-      <p>same-minute Caf arrival{{ 's' if match.likely_meals != 1 }}</p>
+      <p>time{{ 's' if match.likely_meals != 1 }} at the Caf</p>
       <ul>{% for moment in match.likely_meal_times %}<li>{{ moment }}</li>{% endfor %}</ul>
-      <small>Atrium records the minute, not the second, so this is a clue—not proof.</small>
+      <small>Swiped into the Caf in the same minute.</small>
     </section>
     {% endif %}
 
