@@ -1,5 +1,8 @@
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import scraper
 from scraper import parse_swipes
 
 # Trimmed from a real Resident Meals statement: a Caf swipe, a meal exchange at another
@@ -31,6 +34,34 @@ class ScraperTests(unittest.TestCase):
             {"date": "Oct 19, 2026 08:21AM", "location": "Commons PAX 4"},
             {"date": "Sep 29, 2026 12:23PM", "location": "Tiger Exp 1"},
         ])
+
+    def test_page_loads_retry_atrium_server_errors_but_the_login_post_does_not(self):
+        hits = {"GET": 0, "POST": 0}
+
+        class FlakyAtrium(BaseHTTPRequestHandler):
+            def _answer(self):
+                hits[self.command] += 1
+                self.send_response(500 if hits[self.command] == 1 else 200)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            do_GET = do_POST = _answer
+
+            def log_message(self, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), FlakyAtrium)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        url = f"http://127.0.0.1:{server.server_port}/login.php"
+        try:
+            with scraper._session() as session:
+                session.mount("http://", session.get_adapter("https://"))
+                self.assertEqual(session.get(url, timeout=5).status_code, 200)
+                self.assertEqual(session.post(url, timeout=5).status_code, 500)
+        finally:
+            server.shutdown()
+            server.server_close()
+        self.assertEqual(hits, {"GET": 2, "POST": 1})
 
 
 if __name__ == "__main__":

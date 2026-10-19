@@ -15,6 +15,8 @@ from urllib.parse import urlencode, urljoin
 
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 LOGIN_HOST = "https://studentlink.atriumcampus.com"
 LOGIN_URL = f"{LOGIN_HOST}/login.php?guest=1&cid=410"
@@ -24,6 +26,18 @@ CID = "410"
 TIMEOUT = 30  # seconds per request
 ACTIVATION_POLLS = 30  # login-check.php attempts, 2 s apart
 USER_AGENT = "Mozilla/5.0 (compatible; OBU-Stu-Wrapped/2.0; +https://stu.exposed)"
+# Atrium sometimes answers 5xx for a few seconds (the login page 500'd for one student's
+# every attempt). Page loads are retried up to 3 times over about 6 s; the login POST is
+# not, since repeating it could open a second guest session.
+RETRY = Retry(total=3, backoff_factor=1, status_forcelist=(500, 502, 503, 504),
+              allowed_methods=frozenset({"GET"}), raise_on_status=False)
+
+
+def _session() -> requests.Session:
+    session = requests.Session()
+    session.headers["User-Agent"] = USER_AGENT
+    session.mount("https://", HTTPAdapter(max_retries=RETRY))
+    return session
 
 
 class LoginFailed(Exception):
@@ -129,8 +143,7 @@ def fetch_activity(username, password, startdate, enddate, progress=lambda step,
     maps account name to its current balance, e.g. {"Resident Flex": 249.07}; pages is
     each account's raw statement HTML ([{account, acct, html}]) for archiving."""
     purchases, swipes, balances, pages = [], [], {}, []
-    with requests.Session() as session:
-        session.headers["User-Agent"] = USER_AGENT
+    with _session() as session:
         progress(2, "Logging in to Flex Bucks…")
         skey = login(session, username, password)
         try:
