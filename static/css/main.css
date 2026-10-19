@@ -116,6 +116,12 @@ button { font: inherit; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Friend comparison ─────────────────────────────────────── */
+body:has(.compare-page) .flash-container {
+  position: absolute; z-index: 10; top: .9rem; left: 50%; transform: translateX(-50%);
+  width: min(calc(100% - 2rem), 560px); margin: 0; padding: 0;
+}
+body:has(.compare-page) .flash { margin: 0; box-shadow: 0 8px 28px rgba(0,0,0,.2); }
+body:has(.compare-page):has(.flash) .compare-shell { padding-top: 6.5rem; }
 .compare-page {
   position: relative;
   min-height: 100dvh;

@@ -171,3 +171,12 @@ body:has(.viewer) { transition: background-color .5s ease; }
 .share-btn svg { width: 22px; height: 22px; }
 .share-btn:active { transform: scale(.97); }
 .share-btn[disabled] { opacity: .7; }
+
+/* Desktop: moving the full-viewport color layer exposes edge gutters during
+   crossfades. Keep the desktop canvas fixed, and leave slide sharing to mobile. */
+@media (hover: hover) and (pointer: fine) {
+  .slide, .slide.past { transform: none; }
+  .slide { transition: opacity .45s ease, visibility 0s linear .45s; }
+  .slide.active { transition: opacity .45s ease; }
+  .actions { display: none; }
+}

@@ -162,20 +162,6 @@
       {{ foot() }}
     </div></section>
 
-    <!-- ── Visits per weekday ────────────────────────────────── -->
-    <section class="slide t-navy l3"><div class="frame">
-      {{ blobs() }}
-      <div class="body center">
-        <h2 class="display" style="--fs: 52">Average visits<br>per day</h2>
-        {% set most = times.weekdays | map(attribute='avg') | max %}
-        <div class="bars-list">
-          {% for w in times.weekdays %}
-          <div class="hbar big"><span>{{ w.day }}</span><i style="--w: {{ (w.avg / (most or 1) * 100) | round(1) }}%"></i><b>{{ w.avg }}</b></div>
-          {% endfor %}
-        </div>
-      </div>
-      {{ foot() }}
-    </div></section>
     {% endif %}
 
     <!-- ── Caf swipes ────────────────────────────────────────── -->
