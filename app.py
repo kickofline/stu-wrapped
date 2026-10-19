@@ -21,15 +21,17 @@ import og_image
 from insights import parse_when, spot_name, time_insights
 from social import (campus_activity, campus_percentiles, campus_wrapped, dining_badges,
                     dining_streaks, friend_match, signature_order, summary_highlights)
-from jobs import (active_job_for, claim, claim_waiting, cleanup_old_jobs,
-                  create_job, fail, finish, get_job, update_progress)
+from jobs import (claim, claim_waiting, cleanup_old_jobs, fail, finish, get_job,
+                  job_for, update_progress)
 from mailbox import (delete_credentials, inbox_address, is_tag, load_credentials,
                      new_tag, parse_invite, save_credentials, tag_from_recipient)
 from name_map import expand_name
 from scraper import LoginFailed, LoginLimited, NoAccounts, fetch_activity
 
 app = Flask(__name__)
-app.secret_key = "LUKERMKNGAONMXXMGJYAAGYMRIVVECNV"
+app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)  # signs flash messages only
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("SESSION_COOKIE_SECURE", "1") != "0"
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # raw invite emails
 
 DATA_DIR       = os.path.join(os.path.dirname(__file__), "data")
@@ -53,6 +55,22 @@ SITE_DESCRIPTION = ("Your Ouachita Baptist University dining semester, wrapped: 
 @app.context_processor
 def _site_meta():
     return {"site_name": SITE_NAME, "site_description": SITE_DESCRIPTION}
+
+
+# Pages that show one visitor's inbox address, Wrapped or status: never cache them.
+_PRIVATE_PREFIXES = ("/wrapped/", "/results/", "/compare/", "/status/", "/wait/", "/api/")
+
+
+@app.after_request
+def _security_headers(resp: Response) -> Response:
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+    resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    if request.path == "/" or request.path.startswith(_PRIVATE_PREFIXES):
+        resp.headers["Cache-Control"] = "private, no-store"
+    return resp
 
 
 def _log(*args):
@@ -95,7 +113,7 @@ def _aggregate_items(transactions: list) -> list[dict]:
     ]
 
 
-def _load_stats() -> dict:
+def _read_stats() -> dict:
     """Campus-wide comparison stats: {"students": {student_key: latest run summary}}.
     Keyed per student so re-running replaces that student's numbers instead of
     counting them again."""
@@ -106,6 +124,21 @@ def _load_stats() -> dict:
         stats = {}
     stats.setdefault("students", {})
     return stats
+
+
+_stats_cache: dict = {"mtime": None, "stats": {"students": {}}}
+
+
+def _load_stats() -> dict:
+    """Read-only view of the stats, re-parsed only when the file changes (every page
+    view needs it). Never modify it; _record_run writes from its own fresh copy."""
+    try:
+        mtime = os.stat(STATS_FILE).st_mtime_ns
+    except FileNotFoundError:
+        return {"students": {}}
+    if _stats_cache["mtime"] != mtime:
+        _stats_cache.update(mtime=mtime, stats=_read_stats())
+    return _stats_cache["stats"]
 
 
 def _save_stats(stats: dict) -> None:
@@ -124,7 +157,7 @@ def _student_key(invite: dict, tag: str) -> str:
 
 def _result_meta(share_id: str | None) -> dict | None:
     """A saved Wrapped's metadata, or None for a malformed or unknown share id."""
-    if not share_id or not _SHARE_ID_RE.match(share_id):
+    if not share_id or not _SHARE_ID_RE.fullmatch(share_id):
         return None
     try:
         with open(os.path.join(RESULTS_DIR, f"{share_id}.json"), encoding="utf-8") as f:
@@ -194,7 +227,7 @@ def _record_run(transactions: list, swipes: list, student_key: str, year: int) -
     summary["updated"] = datetime.now().isoformat(timespec="seconds")
     with _stats_lock:
         _record_raw_items(transactions)
-        stats = _load_stats()
+        stats = _read_stats()
         stats["students"][student_key] = summary
         _save_stats(stats)
 
@@ -262,7 +295,7 @@ def _save_result(transactions: list, swipes: list, metadata: dict, ai: dict | No
 
 
 def _load_result(share_id: str) -> dict:
-    if not _SHARE_ID_RE.match(share_id):
+    if not _SHARE_ID_RE.fullmatch(share_id):
         abort(404)
     try:
         with open(os.path.join(RESULTS_DIR, f"{share_id}.json"), encoding="utf-8") as f:
@@ -273,11 +306,29 @@ def _load_result(share_id: str) -> dict:
 
 # ── Jobs ─────────────────────────────────────────────────────────────────────
 
+# Each run logs in to Atrium and calls the model; cap how many run at once.
+_SCRAPE_SLOTS = threading.BoundedSemaphore(int(os.environ.get("SCRAPE_CONCURRENCY", "6")))
+
+
 def _start_job(job_id: str, tag: str, invite: dict) -> None:
     threading.Thread(target=_run_job, args=(job_id, tag, invite), daemon=True).start()
 
 
 def _run_job(job_id: str, tag: str, invite: dict) -> None:
+    """Run one Wrapped in a free slot, and never leave its job stuck on "running"."""
+    if not _SCRAPE_SLOTS.acquire(blocking=False):
+        update_progress(job_id, 1, "Lots of people are wrapping right now. You're in line…")
+        _SCRAPE_SLOTS.acquire()
+    try:
+        _wrap(job_id, tag, invite)
+    except Exception:
+        _log(f"[job {job_id}] failed:\n{traceback.format_exc()}")
+        fail(job_id, "Something broke while wrapping your semester. Tap Start over to try again.")
+    finally:
+        _SCRAPE_SLOTS.release()
+
+
+def _wrap(job_id: str, tag: str, invite: dict) -> None:
     startdate, enddate, label = _semester_dates()
     try:
         transactions, swipes, balances, pages = fetch_activity(
@@ -438,8 +489,10 @@ def start():
         flash("Your browser didn't keep our cookie. Enable cookies and try again.", "error")
         return redirect(url_for("index"))
 
-    job = active_job_for(tag)
-    job_id = job["job_id"] if job else create_job(tag)
+    job_id = job_for(tag)
+    if job_id is None:
+        flash("We're swamped right now. Try again in a minute.", "error")
+        return redirect(url_for("index"))
     invite = load_credentials(tag)
     if invite and claim(job_id):
         _start_job(job_id, tag, invite)
@@ -510,7 +563,6 @@ def results(share_id):
     return render_template(
         "dashboard.html",
         items=items,
-        items_json=json.dumps(items),
         first_name=_first_name(meta) if meta.get("name") else "",
         period=f"{'Spring' if start.month <= 6 else 'Fall'} {start.year} · "
                f"{start:%b} {start.day} – {end:%b} {end.day}",
@@ -758,7 +810,11 @@ def server_error(_error):
 
 @app.get("/api/results/<share_id>")
 def api_results(share_id):
-    return jsonify(_load_result(share_id))
+    """Raw receipts: only for the student who made this Wrapped."""
+    result = _load_result(share_id)
+    if not _viewer(share_id)["owner"]:
+        abort(404)
+    return jsonify(result)
 
 
 @app.get("/download/<share_id>/csv")
@@ -778,4 +834,4 @@ def download_csv(share_id):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(debug=True, port=port)
+    app.run(debug=os.environ.get("FLASK_DEBUG") == "1", port=port)

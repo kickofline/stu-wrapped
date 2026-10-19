@@ -17,9 +17,27 @@ JOBS: dict[str, dict] = {}
 _lock = threading.Lock()
 
 
-def create_job(tag: str) -> str:
-    job_id = secrets.token_urlsafe(9)
+MAX_JOBS = 5000  # each in-memory job is well under 1 KB
+STALE_WAITING = timedelta(minutes=30)
+
+
+def job_for(tag: str) -> str | None:
+    """This inbox's waiting or running job, else a new waiting one. Atomic, so parallel
+    taps on Generate share one job. When the table is full, finished and long-stale
+    waiting jobs make room; None if it is still full."""
     with _lock:
+        for job in JOBS.values():
+            if job["tag"] == tag and job["status"] in ("waiting", "running"):
+                return job["job_id"]
+        if len(JOBS) >= MAX_JOBS:
+            cutoff = datetime.now() - STALE_WAITING
+            for job_id in [jid for jid, j in JOBS.items()
+                           if j["status"] in ("done", "error")
+                           or (j["status"] == "waiting" and j["created_at"] < cutoff)]:
+                del JOBS[job_id]
+            if len(JOBS) >= MAX_JOBS:
+                return None
+        job_id = secrets.token_urlsafe(9)
         JOBS[job_id] = {
             "job_id": job_id,
             "tag": tag,
@@ -31,19 +49,11 @@ def create_job(tag: str) -> str:
             "share_id": None,
             "created_at": datetime.now(),
         }
-    return job_id
+        return job_id
 
 
 def get_job(job_id: str) -> dict | None:
     return JOBS.get(job_id)
-
-
-def active_job_for(tag: str) -> dict | None:
-    with _lock:
-        for job in JOBS.values():
-            if job["tag"] == tag and job["status"] in ("waiting", "running"):
-                return job
-    return None
 
 
 def _mark_running(job: dict) -> None:

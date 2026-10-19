@@ -6,4 +6,6 @@ __pycache__/
 *.pyc
 *.pyo
 scraper.log
-data/stats.json
+data/
+.venv/
+.wrangler/
