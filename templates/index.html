@@ -24,14 +24,19 @@
   <div class="landing-inner">
     <p class="eyebrow">{% if vs_name %}{{ vs_name }} shared theirs. Your turn.{% elif returning %}Welcome back{% if returning.first_name %}, {{ returning.first_name }}{% endif %}{% else %}{{ semester_label }} is here{% endif %}</p>
     <h1 class="display">OBU <br class="tall-only">STU<br>WRAPPED</h1>
-    <p class="lede">{% if returning %}Your Flex guest login is saved, so one tap pulls in everything since last time.{% else %}Your semester of CFA runs, Dr. Jack's lattes and Caf swipes, wrapped up.{% endif %}</p>
+    <p class="lede">{% if returning and not returning.has_run %}Your Flex guest login arrived. You're ready—press GO to make your first Wrapped.{% elif returning %}Your Flex guest login is saved, so one tap pulls in everything since last time.{% else %}Your semester of CFA runs, Dr. Jack's lattes and Caf swipes, wrapped up.{% endif %}</p>
 
     {% if returning %}
-    <div class="returning">
+    <div class="returning{% if not returning.has_run %} returning-ready{% endif %}">
       <form method="POST" action="{{ url_for('start') }}">
-        <button type="submit" class="btn-primary cta">Update my Wrapped</button>
+        {% if returning.has_run %}
+        <button type="submit" class="btn-primary cta" data-action="refresh-wrap">Update my Wrapped</button>
+        {% else %}
+        <button type="submit" class="btn-primary cta cta-go" data-action="initial-generate" aria-label="Make my Wrapped">GO →</button>
+        {% endif %}
       </form>
       {% if returning.wrapped_url %}<a class="pill pill-light" href="{{ returning.wrapped_url }}">View my Wrapped</a>{% endif %}
+      {% if not returning.has_run %}<a class="btn-secondary help-link" href="{{ url_for('setup_help') }}">Need help?</a>{% endif %}
       <form method="POST" action="{{ url_for('switch_account') }}">
         <button type="submit" class="link-button">Use a different account</button>
       </form>
@@ -48,7 +53,10 @@
         </li>
         <li>
           <p class="eyebrow">2 · Add it as a Flex Bucks guest</p>
-          <a class="pill pill-light" href="https://connectobu.atriumcampus.com/guestaccess.php" target="_blank" rel="noopener" onclick="track('flex_link_opened')">Open Flex Bucks ↗</a>
+          <div class="setup-actions">
+            <a class="pill pill-light" href="https://connectobu.atriumcampus.com/guestaccess.php" target="_blank" rel="noopener" onclick="markFlexOpened()">Open Flex Bucks ↗</a>
+            <a class="btn-secondary help-link" href="{{ url_for('setup_help') }}">Need help?</a>
+          </div>
         </li>
         <li>
           <p class="eyebrow">3 · Get your Wrapped</p>
@@ -73,5 +81,20 @@
       setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
     });
   }
+
+  function markFlexOpened() {
+    track('flex_link_opened');
+    try { sessionStorage.setItem('stu-wrapped-check-login', '1'); } catch (_) {}
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) return;
+    try {
+      if (sessionStorage.getItem('stu-wrapped-check-login') === '1') {
+        sessionStorage.removeItem('stu-wrapped-check-login');
+        window.location.reload();
+      }
+    } catch (_) {}
+  });
 </script>
 {% endblock %}

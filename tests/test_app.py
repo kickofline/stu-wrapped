@@ -13,9 +13,12 @@ class AppTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.original = (app.RESULTS_DIR, mailbox.CREDENTIALS_DIR, app.new_tag, app.OG_DIR,
+                         app.STATS_FILE, app._stats_cache,
                          analytics.DB_FILE, analytics.SALT_FILE, analytics._salt)
         app.OG_DIR = os.path.join(self.tmp.name, "og")
         app.RESULTS_DIR = self.tmp.name
+        app.STATS_FILE = os.path.join(self.tmp.name, "stats.json")
+        app._stats_cache = {"mtime": object(), "stats": {}}
         mailbox.CREDENTIALS_DIR = os.path.join(self.tmp.name, "credentials")
         analytics.DB_FILE = os.path.join(self.tmp.name, "analytics.db")
         analytics.SALT_FILE = os.path.join(self.tmp.name, "analytics_salt")
@@ -25,6 +28,7 @@ class AppTests(unittest.TestCase):
 
     def tearDown(self):
         (app.RESULTS_DIR, mailbox.CREDENTIALS_DIR, app.new_tag, app.OG_DIR,
+         app.STATS_FILE, app._stats_cache,
          analytics.DB_FILE, analytics.SALT_FILE, analytics._salt) = self.original
         self.tmp.cleanup()
 
@@ -68,6 +72,23 @@ class AppTests(unittest.TestCase):
         client = app.app.test_client()
         client.get("/")
         self.assertEqual(client.get_cookie(app.INBOX_COOKIE).value, "fresh1")
+
+    def test_saved_login_without_a_prior_run_gets_the_first_run_action(self):
+        tag = "abc123"
+        invite = {"username": "guest@example.com", "password": "p", "name": "Pat Doe"}
+        mailbox.save_credentials(tag, invite)
+        client = app.app.test_client()
+        client.set_cookie(app.INBOX_COOKIE, tag)
+
+        first_visit = client.get("/").get_data(as_text=True)
+        self.assertIn('data-action="initial-generate"', first_visit)
+        self.assertNotIn('data-action="refresh-wrap"', first_visit)
+
+        student_key = app._student_key(invite, tag)
+        app._save_stats({"students": {student_key: {"name": "Pat Doe"}}})
+        later_visit = client.get("/").get_data(as_text=True)
+        self.assertIn('data-action="refresh-wrap"', later_visit)
+        self.assertNotIn('data-action="initial-generate"', later_visit)
 
     def test_page_visits_extend_saved_cookies_to_the_400_day_cap(self):
         client = app.app.test_client()

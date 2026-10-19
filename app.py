@@ -62,7 +62,7 @@ def _site_meta():
 
 
 # Pages that show one visitor's inbox address, Wrapped or status: never cache them.
-_PRIVATE_PREFIXES = ("/wrapped/", "/results/", "/compare/", "/status/", "/wait/", "/api/")
+_PRIVATE_PREFIXES = ("/wrapped/", "/results/", "/compare/", "/status/", "/wait/", "/help", "/api/")
 
 
 @app.after_request
@@ -542,8 +542,10 @@ def index():
     returning = None
     if invite:
         mine_id = request.cookies.get(MINE_COOKIE)
+        student_key = _student_key(invite, tag)
         returning = {
             "first_name": _first_name(invite) if invite.get("name") else "",
+            "has_run": student_key in _load_stats().get("students", {}),
             "wrapped_url": url_for("wrapped", share_id=mine_id) if _result_meta(mine_id) else None,
         }
     if not analytics.is_bot(request.user_agent.string):
@@ -556,6 +558,16 @@ def index():
     _set_cookie(resp, INBOX_COOKIE, tag)
     if vs:
         _set_cookie(resp, VS_COOKIE, vs_id, max_age=30 * 24 * 3600)
+    return resp
+
+
+@app.get("/help")
+def setup_help():
+    tag = request.cookies.get(INBOX_COOKIE)
+    if not is_tag(tag):
+        tag = _new_inbox_tag()
+    resp = Response(render_template("help.html", inbox_address=inbox_address(tag)))
+    _set_cookie(resp, INBOX_COOKIE, tag)
     return resp
 
 
