@@ -5,7 +5,7 @@ description = "A Flask web app that scrapes OBU Flex Bucks dining data and shows
 requires-python = ">=3.12"
 dependencies = [
     "flask>=3.0.0",
-    "gunicorn>=22.0.0",
+    "gunicorn>=23.0.0,<24",  # 25.x: worker can deadlock at boot (fork while the control-socket thread holds the logging lock)
     "requests>=2.32.0",
     "beautifulsoup4>=4.12.0",
     "lxml>=5.0.0",
