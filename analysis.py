@@ -34,25 +34,39 @@ def enabled() -> bool:
 
 
 def _chat(system: str, user: str, max_tokens: int) -> dict:
-    resp = requests.post(
-        f"{BASE_URL}/chat/completions",
-        headers={"Authorization": f"Bearer {API_KEY}"},
-        json={
-            "model": MODEL,
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            "max_tokens": max_tokens,
-            "temperature": 0.4,
-            "reasoning_effort": "none",
-            "chat_template_kwargs": {"enable_thinking": False},
-        },
-        timeout=TIMEOUT,
-    )
-    resp.raise_for_status()
-    text = resp.json()["choices"][0]["message"]["content"] or ""
-    match = re.search(r"\{.*\}", text, re.S)  # tolerate ```json fences
-    if not match:
+    """One model call; a reply that isn't parseable JSON gets one retry."""
+    for attempt in range(2):
+        resp = requests.post(
+            f"{BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {API_KEY}"},
+            json={
+                "model": MODEL,
+                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                "max_tokens": max_tokens,
+                "temperature": 0.4,
+                "reasoning_effort": "none",
+                "chat_template_kwargs": {"enable_thinking": False},
+            },
+            timeout=TIMEOUT,
+        )
+        resp.raise_for_status()
+        try:
+            return _first_json_object(resp.json()["choices"][0]["message"]["content"] or "")
+        except ValueError:
+            if attempt:
+                raise
+
+
+def _first_json_object(text: str) -> dict:
+    """The first complete JSON object in a reply: tolerates ```json fences and any
+    text or second object the model adds after it."""
+    start = text.find("{")
+    if start < 0:
         raise ValueError("model reply had no JSON object")
-    return json.loads(match.group(0))
+    obj, _end = json.JSONDecoder().raw_decode(text, start)
+    if not isinstance(obj, dict):
+        raise ValueError("model reply was not a JSON object")
+    return obj
 
 
 # ── Item normalization ───────────────────────────────────────────────────────
