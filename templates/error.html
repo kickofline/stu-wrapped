@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }} · OBU Stu Wrapped{% endblock %}
+
+{% block content %}
+<main class="compare-page">
+  <i class="blob b1"></i><i class="blob b2"></i>
+  <div class="compare-shell">
+    <h1 class="display">{{ heading }}</h1>
+    <p class="compare-lead">{{ message }}</p>
+    <div class="compare-actions">
+      <a class="btn-primary" href="{{ url_for('index') }}">Get your own Wrapped →</a>
+      <a class="btn-secondary" href="{{ url_for('campus_page') }}">Campus Wrapped</a>
+    </div>
+  </div>
+</main>
+{% endblock %}

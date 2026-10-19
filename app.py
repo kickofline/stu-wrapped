@@ -736,6 +736,22 @@ def sitemap_xml():
     )
 
 
+@app.errorhandler(404)
+def not_found(_error):
+    return render_template(
+        "error.html", heading="Nothing here",
+        message="That link doesn't lead anywhere. It may be mistyped, or that Wrapped was deleted.",
+    ), 404
+
+
+@app.errorhandler(500)
+def server_error(_error):
+    return render_template(
+        "error.html", heading="Something broke",
+        message="That one's on us. Try again in a minute.",
+    ), 500
+
+
 @app.get("/api/results/<share_id>")
 def api_results(share_id):
     return jsonify(_load_result(share_id))

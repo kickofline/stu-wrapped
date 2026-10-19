@@ -152,6 +152,8 @@ body:has(.viewer) { transition: background-color .5s ease; }
 .summary ol span { opacity: .5; margin-right: calc(6 * var(--u)); }
 .summary .stat { font-family: var(--display); font-size: calc(40 * var(--u)); letter-spacing: -0.03em; color: var(--ac); line-height: 1; }
 .summary .panel .text { font-size: calc(19 * var(--u)); }
+/* Model-written titles and item names have no length limit; keep the card inside its frame. */
+.summary .clamp-2, .summary .fact-detail { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .flex-line { display: flex; justify-content: space-between; align-items: baseline; margin-top: calc(20 * var(--u)); font-weight: 700; font-size: calc(17 * var(--u)); }
 .flex-line span { opacity: .75; }
 .summary .flex-line { margin-top: calc(14 * var(--u)); }

@@ -289,7 +289,7 @@
         {% if ai %}
         <div class="panel">
           <p class="panel-title">Dining personality</p>
-          <p class="display" style="--fs: 38">{{ ai.personality.title }}</p>
+          <p class="display clamp-2" style="--fs: {{ 30 if ai.personality.title | length > 26 else 38 }}">{{ ai.personality.title }}</p>
         </div>
         {% endif %}
         <div class="grid summary-facts">
@@ -326,7 +326,7 @@
         {% if ai %}
         <div class="panel">
           <p class="panel-title">The roast 🔥</p>
-          <p class="text">{{ ai.roast.split('. ')[0] }}.</p>
+          <p class="text clamp-2">{{ ai.roast.split('. ')[0] }}.</p>
         </div>
         {% endif %}
         {% if flex %}
