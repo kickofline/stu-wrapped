@@ -17,7 +17,8 @@ export default {
       redirect: "manual",
     });
     if (!res.ok) {
-      console.log(`app returned ${res.status} for mail to ${message.to}`);
+      const location = res.headers.get("location");
+      console.log(`app returned ${res.status} for mail to ${message.to}${location ? ` (redirect to ${location})` : ""}`);
     }
   },
 };
