@@ -2,22 +2,24 @@
 {% block title %}{% if first_name %}{{ first_name }}'s{% else %}Your{% endif %} OBU Stu Wrapped · {{ semester_label }}{% endblock %}
 
 {% block meta %}
-{% set og_title = ((first_name ~ "'s OBU Stu Wrapped") if first_name else "OBU Stu Wrapped") ~ " · " ~ semester_label %}
+{% set who = (first_name ~ "'s") if first_name else "My" %}
+{% set og_title = (who ~ " " ~ og.label ~ " · OBU Stu Wrapped") if og.label else (((first_name ~ "'s OBU Stu Wrapped") if first_name else "OBU Stu Wrapped") ~ " · " ~ semester_label) %}
 {% set og_desc = ((ai.personality.title ~ " · ") if ai else "") ~ "See their semester in food, then get yours." %}
 <meta name="theme-color" content="#1e3264">
 <meta name="description" content="{{ og_desc }}">
 <meta property="og:type" content="website">
 <meta property="og:title" content="{{ og_title }}">
 <meta property="og:description" content="{{ og_desc }}">
-<meta property="og:url" content="{{ share_url }}">
-<meta property="og:image" content="{{ og_image }}">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
+<meta property="og:url" content="{{ og.url }}">
+<meta property="og:image" content="{{ og.image }}">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="{{ og.width }}">
+<meta property="og:image:height" content="{{ og.height }}">
 <meta property="og:image:alt" content="{{ og_title }}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{ og_title }}">
 <meta name="twitter:description" content="{{ og_desc }}">
-<meta name="twitter:image" content="{{ og_image }}">
+<meta name="twitter:image" content="{{ og.image }}">
 {% endblock %}
 
 {% block extra_css %}
@@ -52,6 +54,9 @@
         <p class="display ac" style="--fs: {{ 96 if total_spend >= 1000 else 112 }}">{{ money(total_spend) }}</p>
         <p class="lead">on campus food across <b>{{ visits }}</b> visits.</p>
         <p class="sub">That's {{ total_qty }} items — {{ unique_items }} different ones.</p>
+        {% if total_spend - flex_paid >= 0.01 %}
+        <p class="sub">{{ money(flex_paid) }} of it came from Flex; {{ money(total_spend - flex_paid) }} you paid another way.</p>
+        {% endif %}
       </div>
       {{ foot() }}
     </div></section>
@@ -175,7 +180,7 @@
       <div class="body top">
         <p class="eyebrow">You swiped into the Caf</p>
         <p class="display ac" style="--fs: 200">{{ swipes.count }}</p>
-        <p class="eyebrow">times. Mostly for {{ swipe_top_meal | lower }}.</p>
+        <p class="eyebrow">times. Mostly for {{ swipe_top_meal | lower }}.{% if meal_block %} {{ meal_block.left }} swipe{{ 's' if meal_block.left != 1 }} left on your {{ meal_block.name }} plan.{% endif %}</p>
         {% set most = swipes.meal_totals | map(attribute='count') | max %}
         <div class="bars-list tight">
           {% for m in swipes.meal_totals %}
@@ -240,6 +245,12 @@
     <section class="slide t-green l1" data-slide="flex-left"><div class="frame">
       {{ blobs() }}
       <div class="body center">
+        {% if flex.ran_out %}
+        <p class="eyebrow">Out of Flex since</p>
+        <p class="display ac" style="--fs: 110">{{ flex.ran_out_short }}</p>
+        <p class="lead">Your {{ money(flex.started_with) }} lasted {{ flex.lasted_days }} day{{ 's' if flex.lasted_days != 1 }}.</p>
+        {% if flex.swipes_since %}<p class="sub">Since then it's been Caf swipes: {{ flex.swipes_since }} of them.</p>{% endif %}
+        {% else %}
         <p class="eyebrow">Flex Bucks left</p>
         <p class="display ac" style="--fs: {{ 84 if flex.balance >= 1000 else 100 }}">{{ money(flex.balance) }}</p>
         <p class="lead">Spend <u>{{ money(flex.per_week) }} a week</u> to use it all by {{ flex.end }}.</p>
@@ -249,6 +260,7 @@
           {% if flex.runs_out %}At that pace you'll be out by <b>{{ flex.runs_out }}</b>. 🫠
           {% else %}At that pace you'll finish with <b>{{ money(flex.projected_left) }}</b> left.{% endif %}
         </p>
+        {% endif %}
         {% endif %}
       </div>
       {{ foot() }}
@@ -344,7 +356,9 @@
             <p class="fact-detail">{{ money(summary.flex_spend) }} spent on Flex</p>
           </div>
         </div>
-        {% if flex %}
+        {% if flex and flex.ran_out %}
+        <div class="flex-line"><span>Out of Flex since {{ flex.ran_out }}</span><b class="stat">{{ money(0) }}</b></div>
+        {% elif flex %}
         <div class="flex-line"><span>Flex left{% if flex.runs_out %} · out by {{ flex.runs_out }}{% endif %}</span><b class="stat">{{ money(flex.balance) }}</b></div>
         {% endif %}
       </div>
@@ -379,23 +393,34 @@
     </div></section>
   </div>
 
-  <div class="actions">
+  <div class="actions{% if not viewer.owner %} for-friends{% endif %}">
+    {% if viewer.owner %}
     <button class="share-btn" id="share-btn" type="button">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M12 3l-4.5 4.5M12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span id="share-label">Share</span>
     </button>
+    {% elif viewer.versus_url %}
+    <a class="share-btn cta-own" href="{{ viewer.versus_url }}">Compare with yours →</a>
+    {% else %}
+    <a class="share-btn cta-own" href="{{ viewer.get_own_url }}">Get your own Wrapped →</a>
+    {% endif %}
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
+{% if viewer.owner %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
         integrity="sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA=="
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+{% endif %}
 <script>
   const SHARE_URL = {{ share_url | tojson }};
   const SHARE_ID = {{ share_id | tojson }};
   const SHARE_TITLE = {{ ((first_name ~ "'s OBU Stu Wrapped") if first_name else "My OBU Stu Wrapped") | tojson }};
+  const IS_OWNER = {{ viewer.owner | tojson }};
+  const START_SLIDE = {{ start_slide | tojson }};
+  const UPLOADED_SLIDES = new Set({{ uploaded_slides | tojson }});
 </script>
 <script src="{{ url_for('static', filename='js/wrapped.js') }}"></script>
 {% endblock %}

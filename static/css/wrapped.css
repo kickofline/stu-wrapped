@@ -222,10 +222,15 @@ body:has(.viewer) { transition: background-color .5s ease; }
 .share-btn svg { width: 22px; height: 22px; }
 .share-btn:active { transform: scale(.97); }
 .share-btn[disabled] { opacity: .7; }
+/* Friends viewing someone's Wrapped (or a shared slide) get a big "Get your own" button. */
+.share-btn.cta-own { background: var(--lime); color: #111; font-size: 21px; padding: 18px 36px; text-decoration: none;
+  box-shadow: 0 10px 28px rgba(0,0,0,.28); }
+.viewer:has(.actions.for-friends) { --bar: 84px; }
 
-/* Desktop: no share bar (slide sharing is a phone thing) and a still crossfade. */
+/* Desktop: no share bar (slide sharing is a phone thing) and a still crossfade.
+   The friends' "Get your own" button stays. */
 @media (hover: hover) and (pointer: fine) {
-  .viewer { --bar: 0px; }
+  .viewer:not(:has(.actions.for-friends)) { --bar: 0px; }
   .slide .frame, .slide.past .frame { transform: none; }
-  .actions { display: none; }
+  .actions:not(.for-friends) { display: none; }
 }

@@ -29,6 +29,15 @@ def spot_name(location: str) -> str:
     return _SPOT_NAMES.get(spot, spot)
 
 
+def flex_paid(transaction: dict) -> float:
+    """What Flex actually covered. A purchase made as Flex runs out is split: the receipt
+    (grand_total) is the whole meal, the statement amount is only the Flex part."""
+    amount = transaction.get("amount")
+    if isinstance(amount, (int, float)) and amount < 0:
+        return round(-amount, 2)
+    return round(float(transaction.get("grand_total") or 0), 2)
+
+
 def parse_when(text: str, default_year: int) -> datetime | None:
     m = _NUMERIC_DATE.search(text)
     if m:

@@ -19,7 +19,7 @@ load_dotenv()
 import analysis
 import analytics
 import og_image
-from insights import parse_when, spot_name, time_insights
+from insights import flex_paid, parse_when, spot_name, time_insights
 from social import (campus_activity, campus_percentiles, campus_wrapped, dining_badges,
                     dining_streaks, friend_match, signature_order, summary_highlights,
                     tiger_express)
@@ -276,9 +276,11 @@ def _semester_dates() -> tuple[str, str, str]:
 SEMESTER_END = {"Fall": (12, 17), "Spring": (5, 7)}
 
 
-def _flex_plan(transactions: list, meta: dict) -> dict | None:
+def _flex_plan(transactions: list, meta: dict, swipes: list = ()) -> dict | None:
     """Flex left, what it takes to use it up by the end of finals, and where the
-    current pace lands. None when the run has no Flex balance or the semester is over."""
+    current pace lands. A student already out of Flex gets when it ran out, how long it
+    lasted and how many Caf swipes they've used since instead. None when the run has no
+    Flex balance, the semester is over, or there's no Flex money to talk about."""
     flex = [v for k, v in (meta.get("balances") or {}).items() if "flex" in k.lower()]
     if not flex:
         return None
@@ -289,6 +291,22 @@ def _flex_plan(transactions: list, meta: dict) -> dict | None:
     days_left = (end - today).days
     if days_left <= 0:
         return None
+    dated = sorted(((when, tx) for tx in transactions if (when := parse_when(tx["date"], start.year))),
+                   key=lambda pair: pair[0])
+
+    if balance < 0.01:
+        emptied = next(((when, tx) for when, tx in dated if (tx.get("balance_after") or 0) < 0.01), None)
+        if emptied is None:
+            return None  # no Flex money this semester at all
+        out_at, _ = emptied
+        first_at, first = dated[0]
+        return {
+            "balance": 0.0, "end": f"{end:%B} {end.day}", "days_left": days_left,
+            "ran_out": f"{out_at:%B} {out_at.day}", "ran_out_short": f"{out_at:%b} {out_at.day}",
+            "started_with": round((first.get("balance_after") or 0) + flex_paid(first), 2),
+            "lasted_days": (out_at.date() - first_at.date()).days + 1,
+            "swipes_since": sum(1 for s in swipes if (w := parse_when(s.get("date", ""), start.year)) and w > out_at),
+        }
 
     plan = {
         "balance": balance,
@@ -296,12 +314,11 @@ def _flex_plan(transactions: list, meta: dict) -> dict | None:
         "days_left": days_left,
         "per_day": round(balance / days_left, 2),
         "per_week": round(balance / days_left * 7, 2),
-        "pace_per_week": None, "projected_left": None, "runs_out": None,
+        "pace_per_week": None, "projected_left": None, "runs_out": None, "ran_out": None,
     }
-    dates = [d for d in (parse_when(tx["date"], start.year) for tx in transactions) if d]
-    if dates:
-        spent = sum(tx["grand_total"] for tx in transactions)
-        pace = spent / max(1, (today - min(dates).date()).days + 1)  # dollars per day so far
+    if dated:
+        spent = sum(flex_paid(tx) for tx in transactions)
+        pace = spent / max(1, (today - dated[0][0].date()).days + 1)  # dollars per day so far
         plan["pace_per_week"] = round(pace * 7, 2)
         projected = balance - pace * days_left
         if projected >= 0:
@@ -310,6 +327,15 @@ def _flex_plan(transactions: list, meta: dict) -> dict | None:
             out = today + timedelta(days=int(balance / pace))
             plan["runs_out"] = f"{out:%B} {out.day}"
     return plan
+
+
+def _meal_block(meta: dict) -> dict | None:
+    """Swipes left on a block meal plan ("Basic Meals": a fixed number for the semester).
+    Resident plans reset weekly, so their balance isn't a count worth showing."""
+    for name, left in (meta.get("balances") or {}).items():
+        if "meal" in name.lower() and not name.lower().startswith("resident"):
+            return {"name": name, "left": int(left)}
+    return None
 
 
 # ── Results (persisted so share links outlive restarts) ─────────────────────
@@ -440,26 +466,34 @@ def _archive_run(job_id, tag, student, invite, transactions, swipes, balances, p
 def _summary(transactions: list, swipes: list, metadata: dict, label: str) -> dict:
     """Aggregated stats handed to DeepSeek for the personality/roast/money slides."""
     items = _aggregate_items(transactions)
-    spots = defaultdict(lambda: {"visits": 0, "spend": 0.0})
+    spots = defaultdict(lambda: {"visits": 0, "spend": 0.0, "items": set()})
     for tx in transactions:
         spot = spots[spot_name(tx["location"])]
         spot["visits"] += 1
         spot["spend"] += tx["grand_total"]
+        spot["items"].update(c["item"] for c in tx.get("clean_items") or [])
+        if "clean_items" not in tx:
+            spot["items"].update(expand_name(i["name"]) for i in tx["items"])
     total_spend = round(sum(tx["grand_total"] for tx in transactions), 2)
+    paid_by_flex = round(sum(flex_paid(tx) for tx in transactions), 2)
     times = time_insights(transactions, metadata["startdate"], metadata["enddate"])
     swipe_stats = time_insights(swipes, metadata["startdate"], metadata["enddate"])
     return {
         "semester": label,
         "visits": len(transactions),
         "total_spend": total_spend,
+        "paid_with_flex": paid_by_flex,
+        "paid_other_ways": round(total_spend - paid_by_flex, 2),
         "avg_per_visit": round(total_spend / len(transactions), 2) if transactions else 0,
         "top_items": [{k: i[k] for k in ("name", "qty", "total_spend")} for i in items[:10]],
         "unique_items": len(items),
-        "spots": {k: {"visits": v["visits"], "spend": round(v["spend"], 2)} for k, v in spots.items()},
+        "spots": {k: {"visits": v["visits"], "spend": round(v["spend"], 2), "different_items": len(v["items"])}
+                  for k, v in spots.items()},
         "earliest": times and times["earliest"],
         "latest": times and times["latest"],
         "avg_visits_per_weekday": times and {w["day"]: w["avg"] for w in times["weekdays"]},
-        "flex_left": _flex_plan(transactions, metadata),
+        "flex_left": _flex_plan(transactions, metadata, swipes),
+        "meal_plan_swipes_left": _meal_block(metadata),
         "meal_swipes": swipe_stats and {
             "total": swipe_stats["count"],
             "by_meal": {m["meal"]: m["count"] for m in swipe_stats["meal_totals"]},
@@ -681,7 +715,9 @@ def _wrapped_context(share_id: str) -> dict:
         "swipes": swipes,
         "swipe_top_meal": max(swipes["meal_totals"], key=lambda m: m["count"])["meal"] if swipes else None,
         "tiger": tiger_express(result.get("swipes", []), meta),
-        "flex": _flex_plan(transactions, meta),
+        "flex": _flex_plan(transactions, meta, result.get("swipes", [])),
+        "meal_block": _meal_block(meta),
+        "flex_paid": round(sum(flex_paid(tx) for tx in transactions), 2),
         "ai": result.get("analysis"),
         "campus": campus,
         "usual": usual,
@@ -713,26 +749,98 @@ def _viewer(share_id: str) -> dict:
     return {"owner": False, "get_own_url": url_for("index", vs=share_id)}
 
 
-@app.get("/wrapped/<share_id>")
-def wrapped(share_id):
+# Shareable slides: /wrapped/<id>/<slide> opens the deck at that slide, and its link
+# preview (iMessage, Discord...) is the slide itself once the owner's browser has
+# uploaded its rendering; until then it falls back to the Wrapped's preview card.
+SLIDE_TITLES = {
+    "intro": "Semester in food", "spent": "Total spent", "obsession": "#1 obsession",
+    "usual": "Usual order", "personality": "Dining personality", "badges": "Badges",
+    "spots": "Favorite spots", "earliest-latest": "Earliest & latest bite", "caf-swipes": "Caf swipes",
+    "tiger-express": "Tiger Express", "streak": "Caf streak", "flex-left": "Flex Bucks",
+    "roast": "The roast", "money-talk": "Money talk", "rankings": "Campus rankings",
+    "summary": "Semester recap",
+}
+SLIDE_IMAGE_MAX_BYTES = 4 * 1024 * 1024
+
+
+def _slide_image_path(share_id: str, slide: str) -> str:
+    return os.path.join(OG_DIR, f"{share_id}--{slide}.png")
+
+
+def _png_size(head: bytes) -> tuple[int, int] | None:
+    """(width, height) from a PNG's IHDR, or None if it isn't a PNG."""
+    if len(head) < 24 or head[:8] != b"\x89PNG\r\n\x1a\n" or head[12:16] != b"IHDR":
+        return None
+    return int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+
+
+def _uploaded_slides(share_id: str) -> list[str]:
+    return [slide for slide in SLIDE_TITLES if os.path.exists(_slide_image_path(share_id, slide))]
+
+
+def _render_wrapped(share_id: str, slide: str | None = None) -> Response:
     ctx = _wrapped_context(share_id)
     viewer = _viewer(share_id)
     if not analytics.is_bot(request.user_agent.string):
         analytics.record("wrapped_view", visitor=analytics.visitor_id(request.cookies.get(INBOX_COOKIE)),
-                         student=ctx.get("student_key"), share_id=share_id, owner=viewer["owner"])
+                         student=ctx.get("student_key"), share_id=share_id, owner=viewer["owner"], slide=slide)
+    share_url = url_for("wrapped", share_id=share_id, _external=True, _scheme="https")
+    og = {"url": share_url, "label": None, "width": 1200, "height": 630,
+          "image": url_for("og_result", share_id=share_id, _external=True, _scheme="https")}
+    if slide:
+        og.update(url=url_for("wrapped_slide", share_id=share_id, slide=slide, _external=True, _scheme="https"),
+                  label=SLIDE_TITLES[slide])
+        path = _slide_image_path(share_id, slide)
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                og["width"], og["height"] = _png_size(f.read(24)) or (1080, 1920)
+            og["image"] = url_for("og_slide", share_id=share_id, slide=slide, _external=True, _scheme="https")
     resp = Response(render_template(
         "wrapped.html",
         **ctx,
         viewer=viewer,
+        og=og,
+        start_slide=slide,
+        uploaded_slides=_uploaded_slides(share_id) if viewer["owner"] else [],
         dashboard_url=url_for("results", share_id=share_id),
-        share_url=url_for("wrapped", share_id=share_id, _external=True, _scheme="https"),
-        og_image=url_for("og_result", share_id=share_id, _external=True, _scheme="https"),
+        share_url=share_url,
         compare_url=url_for("compare_start", share_id=share_id),
     ))
     if viewer["owner"] and request.cookies.get(MINE_COOKIE) != share_id:
         # Owners who generated before this cookie existed: remember it for friends' links.
         _set_cookie(resp, MINE_COOKIE, share_id)
     return resp
+
+
+@app.get("/wrapped/<share_id>")
+def wrapped(share_id):
+    return _render_wrapped(share_id)
+
+
+@app.get("/wrapped/<share_id>/<slide>")
+def wrapped_slide(share_id, slide):
+    if slide not in SLIDE_TITLES:
+        return redirect(url_for("wrapped", share_id=share_id))
+    return _render_wrapped(share_id, slide)
+
+
+@app.post("/api/slide-image/<share_id>/<slide>")
+def upload_slide_image(share_id, slide):
+    """The owner's browser uploads each slide's 1080-wide rendering for link previews."""
+    if slide not in SLIDE_TITLES or _result_meta(share_id) is None or not _viewer(share_id)["owner"]:
+        return "", 404
+    if (request.content_length or 0) > SLIDE_IMAGE_MAX_BYTES:
+        return "", 413
+    data = request.get_data()
+    size = _png_size(data[:24])
+    if not size or size[0] != 1080 or not 1700 <= size[1] <= 2100 or len(data) > SLIDE_IMAGE_MAX_BYTES:
+        return "", 400
+    os.makedirs(OG_DIR, exist_ok=True)
+    path = _slide_image_path(share_id, slide)
+    with open(path + ".tmp", "wb") as f:
+        f.write(data)
+    os.replace(path + ".tmp", path)
+    return "", 204
 
 
 def _comparison_profile(share_id: str) -> dict:
@@ -822,11 +930,25 @@ def og_result(share_id):
         subtitle = " · ".join(filter(None, [
             ctx["ai"]["personality"]["title"] if ctx["ai"] else None,
             f"{ctx['swipes']['count']} Caf swipes" if ctx["swipes"] else None,
-            f"${ctx['total_spend']:,.2f} on Flex" if ctx["total_spend"] else None,
+            f"${ctx['flex_paid']:,.2f} on Flex" if ctx["flex_paid"] else None,
         ]))
         heading = f"{ctx['first_name']}'s {ctx['semester_label']}" if ctx["first_name"] else ctx["semester_label"]
         og_image.render(path, heading, subtitle)
     return send_file(path, mimetype="image/png", max_age=86400)
+
+
+@app.get("/og/<share_id>/<slide>.png")
+def og_slide(share_id, slide):
+    """A slide's uploaded rendering, or the Wrapped's preview card until there is one."""
+    if slide not in SLIDE_TITLES or not _SHARE_ID_RE.fullmatch(share_id):
+        abort(404)
+    path = _slide_image_path(share_id, slide)
+    if not os.path.exists(path):
+        return og_result(share_id)
+    meta = _result_meta(share_id) or {}
+    analytics.record("link_preview", student=meta.get("student_key"), share_id=share_id, slide=slide,
+                     app=analytics.preview_app(request.user_agent.string))
+    return send_file(path, mimetype="image/png", max_age=3600)
 
 
 @app.get("/og/site.png")

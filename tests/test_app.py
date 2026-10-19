@@ -12,8 +12,9 @@ import mailbox
 class AppTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.original = (app.RESULTS_DIR, mailbox.CREDENTIALS_DIR, app.new_tag,
+        self.original = (app.RESULTS_DIR, mailbox.CREDENTIALS_DIR, app.new_tag, app.OG_DIR,
                          analytics.DB_FILE, analytics.SALT_FILE, analytics._salt)
+        app.OG_DIR = os.path.join(self.tmp.name, "og")
         app.RESULTS_DIR = self.tmp.name
         mailbox.CREDENTIALS_DIR = os.path.join(self.tmp.name, "credentials")
         analytics.DB_FILE = os.path.join(self.tmp.name, "analytics.db")
@@ -23,7 +24,7 @@ class AppTests(unittest.TestCase):
         jobs.JOBS.clear()
 
     def tearDown(self):
-        (app.RESULTS_DIR, mailbox.CREDENTIALS_DIR, app.new_tag,
+        (app.RESULTS_DIR, mailbox.CREDENTIALS_DIR, app.new_tag, app.OG_DIR,
          analytics.DB_FILE, analytics.SALT_FILE, analytics._salt) = self.original
         self.tmp.cleanup()
 
@@ -132,6 +133,43 @@ class AppTests(unittest.TestCase):
         finally:
             app._wrap = original
         self.assertEqual(jobs.get_job(job_id)["status"], "error")
+
+    def test_split_last_purchase_and_out_of_flex(self):
+        # $20 of Flex: a $15 meal, then a $14.70 meal that Flex only covered $5 of.
+        purchases = [
+            {"date": "Sep 9, 2026 12:36PM", "amount": -5.0, "grand_total": 14.70, "balance_after": 0.0},
+            {"date": "Sep 1, 2026 12:00PM", "amount": -15.0, "grand_total": 15.0, "balance_after": 5.0},
+        ]
+        swipes = [{"date": "Sep 8, 2026 08:00AM"}, {"date": "Sep 10, 2026 08:00AM"}, {"date": "Oct 1, 2026 08:00AM"}]
+        meta = {"startdate": "2026-07-01", "enddate": "2026-10-19",
+                "balances": {"Commuter Flex": 0.0, "Basic Meals": 26.0}}
+        plan = app._flex_plan(purchases, meta, swipes)
+        self.assertEqual((plan["ran_out"], plan["started_with"], plan["lasted_days"], plan["swipes_since"]),
+                         ("September 9", 20.0, 9, 2))
+        self.assertIsNone(plan.get("runs_out"))
+        self.assertEqual(app.summary_highlights(purchases, swipes, meta)["flex_spend"], 20.0)
+        self.assertEqual(app._meal_block(meta), {"name": "Basic Meals", "left": 26})
+        self.assertIsNone(app._meal_block({"balances": {"Resident Meals": 98}}))
+
+    def test_slide_links_preview_the_owners_uploaded_slide(self):
+        self._save_result("slideshare12")
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\x0dIHDR" + (1080).to_bytes(4, "big") + (1920).to_bytes(4, "big") + b"rest"
+        upload = lambda client, body=png: client.post("/api/slide-image/slideshare12/roast", data=body,
+                                                      content_type="image/png")
+        friend, owner = app.app.test_client(), app.app.test_client()
+        owner.set_cookie(app.MINE_COOKIE, "slideshare12")
+        self.assertEqual(upload(friend).status_code, 404)
+        self.assertEqual(upload(owner, b"not a png" * 4).status_code, 400)
+        before = friend.get("/wrapped/slideshare12/roast").get_data(as_text=True)
+        self.assertIn("/og/slideshare12.png", before)  # no slide image yet: the Wrapped's card
+        self.assertEqual(upload(owner).status_code, 204)
+        page = friend.get("/wrapped/slideshare12/roast").get_data(as_text=True)
+        self.assertIn('content="https://localhost/og/slideshare12/roast.png"', page)
+        self.assertIn('og:image:height" content="1920"', page)
+        self.assertIn("Get your own Wrapped", page)
+        self.assertNotIn('id="share-btn"', page)
+        self.assertEqual(friend.get("/og/slideshare12/roast.png").data, png)
+        self.assertEqual(friend.get("/wrapped/slideshare12/nonsense").status_code, 302)
 
 
 if __name__ == "__main__":

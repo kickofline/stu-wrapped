@@ -172,6 +172,10 @@ of one Ouachita Baptist University student's campus dining purchases this semest
 You get their stats as JSON. Write in second person, specific to their numbers and items, upbeat,
 short, and clean (PG, no profanity, nothing about body or weight). Every claim must follow from
 the numbers given: never invent comparisons, counts, or items, and check any "more than" against the data.
+Only name a day of the week (including puns like "Taco Tuesday") when avg_visits_per_weekday shows
+visits that day; per-spot item variety is spots[...].different_items. If flex_left.ran_out is set,
+their Flex already ran out on that date: say so and never project a future run-out date. If
+paid_other_ways is above 0, only paid_with_flex came from Flex.
 Answer with JSON only:
 {"personality": {"title": "a 2-4 word dining persona, at most 28 characters", "description": "2-3 sentences"},
  "roast": "2-3 sentences of playful teasing about their habits",

@@ -2,7 +2,7 @@
 from collections import Counter
 from datetime import date, timedelta
 
-from insights import WEEKDAYS, parse_when, spot_name
+from insights import WEEKDAYS, flex_paid, parse_when, spot_name
 from name_map import expand_name
 
 
@@ -147,7 +147,7 @@ def summary_highlights(transactions: list, swipes: list, metadata: dict) -> dict
         "routine": routine,
         "caf_swipes": len(swipes),
         "flex_visits": len(transactions),
-        "flex_spend": round(sum(float(transaction.get("grand_total") or 0) for transaction in transactions), 2),
+        "flex_spend": round(sum(flex_paid(transaction) for transaction in transactions), 2),
     }
 
 

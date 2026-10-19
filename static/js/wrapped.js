@@ -1,10 +1,10 @@
-/* Story-style Wrapped viewer: tap/swipe/keys to move between 9:16 slides, and a
-   share button that sends the current slide as a 1080x1920 image through the
-   phone's share sheet (download on desktop). The outro slide shares the link.
+/* Story-style Wrapped viewer: tap/swipe/keys to move between 9:16 slides. The owner's
+   share button sends a link to the current slide (/wrapped/<id>/<slide>); the outro
+   shares the whole Wrapped. Friends get a "Get your own" button instead.
 
-   iOS only opens the share sheet while the tap is still "fresh", so each slide's
-   image is rendered in the background as soon as it is shown; the tap then just
-   hands the cached file to navigator.share(). */
+   So that link previews (iMessage, Discord...) show the slide itself, the owner's
+   browser renders each slide to a 1080-wide PNG shortly after showing it and uploads
+   it once; the server uses it as that slide link's og:image. */
 
 const stage = document.getElementById('stage');
 const slides = Array.from(stage.querySelectorAll('.slide'));
@@ -29,8 +29,8 @@ function show(index) {
   const style = getComputedStyle(slides[index]);
   document.body.style.backgroundColor = style.getPropertyValue('--bg');
   progress.style.color = style.getPropertyValue('--fg');
-  shareLabel.textContent = isLinkSlide(index) ? 'Share link' : 'Share';
-  if (!isLinkSlide(index)) setTimeout(() => { if (current === index) imageFor(index); }, 650);
+  if (shareLabel) shareLabel.textContent = isLinkSlide(index) ? 'Share link' : 'Share';
+  if (IS_OWNER && !isLinkSlide(index)) setTimeout(() => { if (current === index) uploadSlide(index); }, 650);
 }
 
 const isLinkSlide = (i) => slides[i].dataset.share === 'link';
@@ -58,7 +58,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
 });
 
-// ── Share images ──────────────────────────────────────────────
+// ── Slide images for link previews (owner only) ─────────────────
 function imageFor(index) {
   if (!images.has(index)) {
     const frame = slides[index].querySelector('.frame');
@@ -72,22 +72,25 @@ function imageFor(index) {
       }))
       .then((canvas) => new Promise((resolve, reject) =>
         canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('empty image'))), 'image/png')));
-    job.catch(() => images.delete(index));  // let a later tap retry
+    job.catch(() => images.delete(index));  // let a later visit retry
     images.set(index, job);
   }
   return images.get(index);
 }
 
-function download(blob, name) {
-  const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement('a'), { href: url, download: name });
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
-}
-
 const slideName = (i) => slides[i].dataset.slide || String(i);
+const slideUrl = (i) => (isLinkSlide(i) ? SHARE_URL : `${SHARE_URL}/${slideName(i)}`);
+
+function uploadSlide(index) {
+  const name = slideName(index);
+  if (UPLOADED_SLIDES.has(name) || typeof html2canvas === 'undefined') return;
+  UPLOADED_SLIDES.add(name);  // one attempt per page view
+  imageFor(index)
+    .then((blob) => fetch(`/api/slide-image/${SHARE_ID}/${name}`, {
+      method: 'POST', body: blob, headers: { 'Content-Type': 'image/png' },
+    }))
+    .catch(() => UPLOADED_SLIDES.delete(name));
+}
 
 async function shareLink() {
   if (navigator.share) {
@@ -113,39 +116,22 @@ function flashLabel(text) {
 async function shareSlide() {
   const index = current;
   if (isLinkSlide(index)) return shareLink();
-
-  shareBtn.disabled = true;
-  shareLabel.textContent = 'Preparing…';
-  let blob;
-  try {
-    blob = await imageFor(index);
-  } catch (_) {
-    shareBtn.disabled = false;
-    flashLabel('Try again');
-    return;
-  }
-  shareBtn.disabled = false;
-  shareLabel.textContent = 'Share';
-
-  const file = new File([blob], `obu-stu-wrapped-${index + 1}.png`, { type: 'image/png' });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+  const url = slideUrl(index);
+  if (navigator.share) {
     try {
-      await navigator.share({ files: [file], title: SHARE_TITLE, text: 'Get yours at stu.exposed' });
+      await navigator.share({ title: SHARE_TITLE, url });
       track('share_slide', { share_id: SHARE_ID, slide: slideName(index), method: 'share' });
-    } catch (err) {
-      // iOS refuses if rendering took long enough to expire the tap; the image is
-      // cached now, so the next tap shares instantly.
-      if (err.name === 'NotAllowedError') flashLabel('Tap again to share');
-      else track('share_slide', { share_id: SHARE_ID, slide: slideName(index), method: 'dismissed' });
+    } catch (_) {
+      track('share_slide', { share_id: SHARE_ID, slide: slideName(index), method: 'dismissed' });
     }
     return;
   }
-  download(blob, file.name);
-  track('share_slide', { share_id: SHARE_ID, slide: slideName(index), method: 'download' });
-  flashLabel('Saved!');
+  await navigator.clipboard.writeText(url);
+  track('share_slide', { share_id: SHARE_ID, slide: slideName(index), method: 'copy' });
+  flashLabel('Link copied!');
 }
 
-shareBtn.addEventListener('click', shareSlide);
+if (shareBtn) shareBtn.addEventListener('click', shareSlide);
 document.querySelectorAll('.js-share-link').forEach((btn) =>
   btn.addEventListener('click', (e) => { e.stopPropagation(); shareLink(); }));
 
@@ -176,4 +162,6 @@ function fitDisplays() {
 document.fonts.ready.then(fitDisplays);
 window.addEventListener('resize', fitDisplays);
 
-show(0);
+// A slide link (/wrapped/<id>/<slide>) opens the deck at that slide.
+const startIndex = slides.findIndex((slide) => slide.dataset.slide === START_SLIDE);
+show(Math.max(0, startIndex));
