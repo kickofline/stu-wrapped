@@ -564,7 +564,11 @@ def compare_results(left_id, right_id):
         return redirect(url_for("compare_start", share_id=left_id))
     left = _comparison_profile(left_id)
     right = _comparison_profile(right_id)
-    if left["_student_key"] and left["_student_key"] == right["_student_key"]:
+    same_key = left["_student_key"] and left["_student_key"] == right["_student_key"]
+    left_name = " ".join(left["name"].casefold().split())
+    right_name = " ".join(right["name"].casefold().split())
+    same_legacy_name = (not left["_student_key"] or not right["_student_key"]) and left_name and left_name == right_name
+    if same_key or same_legacy_name:
         flash("Those links belong to the same student. Ask a friend for theirs!", "error")
         return redirect(url_for("compare_start", share_id=left_id))
     match = friend_match(left, right)
