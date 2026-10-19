@@ -53,5 +53,5 @@ Sizes are Medium/Large (or 16/20 oz): put the size in detail.
   Make Breve, Make Oat, Add Chocolate Chips, Add Espresso Shot, Add Matcha Powder, Add Whipped Cream
 - Syrup flavors: Caramel, Classic, Orange, Raspberry, Toffee Nut, Cinnamon, Hazelnut, Peach, Strawberry, Vanilla
 
-## Tiger Express (register "Tiger Exp") and C-Store
+## Tiger Express (register "Tiger Exp") and Tiger Mart (register "C-Store")
 Grab-and-go and packaged items: keep the product name (e.g. "Propel" with flavor in detail, "Alani Nu" with flavor in detail).
