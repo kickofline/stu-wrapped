@@ -10,6 +10,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
 
+import requests
 from dotenv import load_dotenv
 from flask import (Flask, Response, abort, flash, jsonify, redirect,
                    render_template, request, send_file, url_for)
@@ -91,6 +92,18 @@ def _refresh_cookies(resp: Response) -> None:
 
 def _log(*args):
     print(*args, flush=True)
+
+def _notify_signup(name: str | None) -> None:
+    """Publish one best-effort notification for each named Atrium invite."""
+    url = os.environ.get("NTFY_URL", "").strip()
+    display_name = " ".join((name or "").split())
+    if not url or not display_name:
+        return
+    try:
+        response = requests.post(url, data=f"signup: {display_name}".encode(), timeout=3)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        _log(f"[ntfy] signup notification failed: {type(exc).__name__}")
 
 
 def _aggregate_items(transactions: list) -> list[dict]:
@@ -648,6 +661,7 @@ def api_inbound():
     save_credentials(tag, invite)
     analytics.record("invite_received", visitor=analytics.visitor_id(tag),
                      student=_student_key(invite, tag), name=invite.get("name"))
+    _notify_signup(invite.get("name"))
     woken = claim_waiting(tag)
     for job_id in woken:
         _start_job(job_id, tag, invite)
