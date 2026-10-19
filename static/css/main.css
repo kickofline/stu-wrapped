@@ -164,16 +164,19 @@ body:has(.compare-page):has(.flash) .compare-shell { padding-top: 6.5rem; }
 .match-score { display: flex; align-items: baseline; gap: .8rem; margin: 1rem 0 2rem; }
 .match-score strong { font-family: var(--display); font-size: clamp(4rem, 14vw, 7rem); line-height: .8; color: #ffe14d; }
 .match-score span { font-size: 1.3rem; font-weight: 800; }
-.profiles { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-.friend-profile { min-width: 0; padding: 1.5rem; border-radius: 20px; background: #2d46b9; overflow: hidden; }
+/* Both cards share the parent's rows (subgrid), so a two-line top item on one side
+   lines up the stats, badge and link with the other card instead of pushing them down. */
+.profiles { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(5, auto); column-gap: 1rem; }
+.friend-profile { display: grid; grid-row: span 5; grid-template-rows: subgrid; row-gap: 0; min-width: 0; padding: 1.5rem; border-radius: 20px; background: #2d46b9; overflow: hidden; }
 .friend-profile.right { background: #ff7a1a; }
-.friend-profile h2 { font-size: clamp(1.65rem, 5vw, 2.5rem); color: #f4ff5c; margin: .65rem 0 1.25rem; overflow-wrap: anywhere; }
-.friend-profile dl { display: grid; gap: .8rem; }
+.friend-profile > .card-label { grid-row: 1; }
+.friend-profile h2 { grid-row: 2; font-size: clamp(1.65rem, 5vw, 2.5rem); color: #f4ff5c; margin: .65rem 0 1.25rem; overflow-wrap: anywhere; }
+.friend-profile dl { grid-row: 3; display: grid; gap: .8rem; }
 .friend-profile dl div { display: flex; justify-content: space-between; gap: .75rem; border-top: 1px solid rgba(255,255,255,.18); padding-top: .7rem; }
 .friend-profile dt { color: rgba(255,255,255,.72); font-weight: 700; }
 .friend-profile dd { font-weight: 900; text-align: right; }
-.profile-badge { display: inline-block; margin-top: 1.2rem; border-radius: 999px; padding: .45rem .7rem; background: rgba(0,0,0,.16); font-weight: 800; }
-.friend-profile a { display: block; color: #fff; font-weight: 800; margin-top: 1rem; }
+.profile-badge { grid-row: 4; justify-self: start; align-self: start; display: inline-block; margin-top: 1.2rem; border-radius: 999px; padding: .45rem .7rem; background: rgba(0,0,0,.16); font-weight: 800; }
+.friend-profile a { grid-row: 5; justify-self: start; display: block; color: #fff; font-weight: 800; margin-top: 1rem; }
 .caf-buddy { margin-top: 1rem; background: #19e68c; color: #0d1f12; }
 .caf-buddy > strong { display: block; font-family: var(--display); font-size: clamp(4rem, 14vw, 7rem); line-height: .85; margin-top: .8rem; }
 .caf-buddy > p:not(.card-label) { font-size: 1.25rem; font-weight: 800; }
@@ -182,11 +185,12 @@ body:has(.compare-page):has(.flash) .compare-shell { padding-top: 6.5rem; }
 .caf-buddy small { display: block; margin-top: 1rem; font-weight: 700; opacity: .68; }
 .shared-card { margin-top: 1rem; }
 .shared-card ol { list-style: none; display: grid; gap: .7rem; margin-top: .8rem; }
-.shared-card li { font-family: var(--display); font-size: clamp(1.25rem, 4vw, 2rem); line-height: 1.05; }
-.shared-card li span { display: inline-flex; width: 1.8rem; height: 1.8rem; align-items: center; justify-content: center; border-radius: 50%; background: #ffe14d; color: #2a0f00; font: 800 .85rem var(--font); margin-right: .65rem; }
+.shared-card li { display: flex; align-items: center; gap: .65rem; font-family: var(--display); font-size: clamp(1.25rem, 4vw, 2rem); line-height: 1.05; }
+.shared-card li span { flex: none; display: inline-flex; width: 1.8rem; height: 1.8rem; align-items: center; justify-content: center; border-radius: 50%; background: #ffe14d; color: #2a0f00; font: 800 .85rem var(--font); }
 .compare-actions { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: 1.2rem; }
 
 @media (max-width: 620px) {
   .invite-card { align-items: flex-start; flex-direction: column; }
-  .profiles { grid-template-columns: 1fr; }
+  .profiles { grid-template-columns: 1fr; grid-template-rows: none; row-gap: 1rem; }
+  .friend-profile { display: block; grid-row: auto; }
 }
