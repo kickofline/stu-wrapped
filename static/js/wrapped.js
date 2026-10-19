@@ -135,4 +135,23 @@ shareBtn.addEventListener('click', shareSlide);
 document.querySelectorAll('.js-share-link').forEach((btn) =>
   btn.addEventListener('click', (e) => { e.stopPropagation(); shareLink(); }));
 
+// ── Big headings: shrink one until its longest word fits on a line, instead of
+// splitting the word ("Connoisseu / r"). Sizes are in frame units, so the fit is
+// the same on every screen and in the exported image.
+function fitDisplays() {
+  document.querySelectorAll('.slide .display').forEach((el) => {
+    if (!el.dataset.fs) el.dataset.fs = getComputedStyle(el).getPropertyValue('--fs').trim() || '80';
+    const base = parseFloat(el.dataset.fs);
+    let fs = base;
+    el.style.overflowWrap = 'normal';
+    el.style.setProperty('--fs', fs);
+    while (el.scrollWidth > el.clientWidth + 1 && fs > base * 0.4) {
+      fs -= 2;
+      el.style.setProperty('--fs', fs);
+    }
+  });
+}
+document.fonts.ready.then(fitDisplays);
+window.addEventListener('resize', fitDisplays);
+
 show(0);

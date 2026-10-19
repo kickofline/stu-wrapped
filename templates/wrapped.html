@@ -323,12 +323,6 @@
             <p class="fact-detail">{{ money(summary.flex_spend) }} spent on Flex</p>
           </div>
         </div>
-        {% if ai %}
-        <div class="panel">
-          <p class="panel-title">The roast 🔥</p>
-          <p class="text clamp-2">{{ ai.roast.split('. ')[0] }}.</p>
-        </div>
-        {% endif %}
         {% if flex %}
         <div class="flex-line"><span>Flex left{% if flex.runs_out %} · out by {{ flex.runs_out }}{% endif %}</span><b class="stat">{{ money(flex.balance) }}</b></div>
         {% endif %}
