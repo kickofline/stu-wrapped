@@ -217,7 +217,7 @@ at the spots in its top_items[...].bought_at (never place it at another spot). I
 their Flex already ran out on that date: say so and never project a future run-out date. If
 paid_other_ways is above 0, only paid_with_flex came from Flex.
 Answer with JSON only:
-{"personality": {"title": "a 2-4 word dining persona, at most 28 characters", "description": "2-3 sentences"},
+{"personality": {"title": "a 2-4 word dining persona, at most 28 characters, built from their food (top items, spots, times), never from Flex or money", "description": "2-3 sentences"},
  "roast": "2-3 sentences of playful teasing about their habits",
  "money": ["3 short plain-language observations about their spending, the last one a gentle suggestion"]}"""
 
