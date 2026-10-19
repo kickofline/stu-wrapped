@@ -19,8 +19,8 @@ WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", 
 MEALS = (("Breakfast", 0, 10 * 60 + 30), ("Lunch", 10 * 60 + 30, 16 * 60), ("Dinner", 16 * 60, 24 * 60))
 LATE_NIGHT_CUTOFF = 4 * 60  # purchases before 4 AM count as the previous night's latest
 _REGISTER = re.compile(r"\s+(?:PAX\s+)?\d+$", re.IGNORECASE)
-# What students call each spot; the dining hall is the only place to swipe.
-_SPOT_NAMES = {"Commons": "the Caf"}
+# What students call each spot; the Caf is the only place to swipe.
+_SPOT_NAMES = {"Commons": "the Caf", "Tacos": "Tacos 4 Life"}
 
 
 def spot_name(location: str) -> str:
