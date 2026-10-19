@@ -100,6 +100,8 @@ body:has(.viewer) { transition: background-color .5s ease; }
 .slide .eyebrow { color: var(--fg); font-weight: 800; font-size: calc(21 * var(--u)); }
 .slide .lead { font-weight: 800; font-size: calc(26 * var(--u)); line-height: 1.25; }
 .slide .sub { font-weight: 700; font-size: calc(19 * var(--u)); line-height: 1.35; opacity: .8; margin-top: calc(22 * var(--u)); }
+.slide .slide-link { display: inline-flex; margin-top: calc(18 * var(--u)); font-size: calc(18 * var(--u)); padding: calc(12 * var(--u)) calc(22 * var(--u)); background: var(--chip); color: inherit; }
+.capturing .slide .slide-link { display: none; }
 .slide .text { font-weight: 700; font-size: calc(20 * var(--u)); line-height: 1.42; }
 .slide .text.big { font-size: calc(24 * var(--u)); }
 .slide .emoji { font-size: calc(44 * var(--u)); line-height: 1; margin-bottom: calc(8 * var(--u)); }

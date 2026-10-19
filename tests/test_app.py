@@ -47,6 +47,16 @@ class AppTests(unittest.TestCase):
         client.get("/")
         self.assertEqual(client.get_cookie(app.INBOX_COOKIE).value, "fresh1")
 
+    def test_page_visits_extend_saved_cookies_to_the_400_day_cap(self):
+        client = app.app.test_client()
+        client.set_cookie(app.MINE_COOKIE, "abcdefghijkl")
+        page = client.get("/")
+        mine = [h for h in page.headers.getlist("Set-Cookie") if h.startswith("mine=")]
+        self.assertEqual(len(mine), 1)
+        self.assertIn(f"Max-Age={400 * 24 * 3600}", mine[0])
+        asset = client.get("/static/css/main.css")
+        self.assertEqual(asset.headers.getlist("Set-Cookie"), [])
+
     def test_raw_receipts_are_only_served_to_the_owner(self):
         share_id = "abcdefghijkl"
         result = {"metadata": {"name": "Pat Doe", "student_key": "k" * 16,

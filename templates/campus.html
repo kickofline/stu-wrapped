@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Campus Wrapped · OBU Stu Wrapped{% endblock %}
+{% block title %}Campus Leaderboard · OBU Stu Wrapped{% endblock %}
 {% block robots %}index, follow, max-image-preview:large{% endblock %}
 
 {% block meta %}
@@ -13,7 +13,7 @@
 <meta name="description" content="{{ desc }}">
 <link rel="canonical" href="{{ canonical }}">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Campus Wrapped · {{ semester_label }}">
+<meta property="og:title" content="Campus Leaderboard · {{ semester_label }}">
 <meta property="og:description" content="{{ desc }}">
 <meta property="og:url" content="{{ canonical }}">
 <meta property="og:image" content="{{ og_image }}">
@@ -21,7 +21,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="OBU Stu Wrapped">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Campus Wrapped · {{ semester_label }}">
+<meta name="twitter:title" content="Campus Leaderboard · {{ semester_label }}">
 <meta name="twitter:description" content="{{ desc }}">
 <meta name="twitter:image" content="{{ og_image }}">
 {% endblock %}
@@ -34,7 +34,7 @@
   <div class="compare-shell wide">
     <a class="back-link" href="{{ url_for('index') }}">← Get your own Wrapped</a>
     <p class="eyebrow">{{ semester_label }}</p>
-    <h1 class="display">CAMPUS<br>WRAPPED</h1>
+    <h1 class="display">CAMPUS<br>LEADERBOARD</h1>
     {% if campus %}
     <p class="compare-lead">What OBU ate this semester, from {{ campus.students }} students' Stu Wrapped.</p>
 
@@ -68,7 +68,7 @@
     </section>
     {% endif %}
     {% else %}
-    <p class="compare-lead">Campus Wrapped unlocks once 3 students have wrapped their semester. {% if wrapped_count %}{{ wrapped_count }} so far. Be next.{% else %}Be the first.{% endif %}</p>
+    <p class="compare-lead">The Campus Leaderboard unlocks once 3 students have wrapped their semester. {% if wrapped_count %}{{ wrapped_count }} so far. Be next.{% else %}Be the first.{% endif %}</p>
     {% endif %}
 
     <div class="compare-actions"><a class="btn-primary" href="{{ url_for('index') }}">Get your own Wrapped →</a></div>

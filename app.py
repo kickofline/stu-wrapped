@@ -69,9 +69,22 @@ def _security_headers(resp: Response) -> Response:
     resp.headers.setdefault("X-Frame-Options", "DENY")
     resp.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
     resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    _refresh_cookies(resp)
     if request.path == "/" or request.path.startswith(_PRIVATE_PREFIXES):
         resp.headers["Cache-Control"] = "private, no-store"
     return resp
+
+
+def _refresh_cookies(resp: Response) -> None:
+    """Slide the 400-day expiry forward on every page visit, so a browser that keeps
+    coming back never loses its saved login or its own Wrapped link."""
+    if resp.mimetype != "text/html":
+        return
+    already_set = {header.split("=", 1)[0] for header in resp.headers.getlist("Set-Cookie")}
+    for name in (INBOX_COOKIE, MINE_COOKIE):
+        value = request.cookies.get(name)
+        if value and name not in already_set:
+            _set_cookie(resp, name, value)
 
 
 def _log(*args):
@@ -181,7 +194,11 @@ def _first_name(meta: dict) -> str:
     return parts[0] if parts else "your friend"
 
 
-def _set_cookie(resp: Response, name: str, value: str, max_age: int = 365 * 24 * 3600) -> None:
+# Browsers cap cookie lifetimes at 400 days (Chrome/Edge enforce it; RFC 6265bis).
+COOKIE_MAX_AGE = 400 * 24 * 3600
+
+
+def _set_cookie(resp: Response, name: str, value: str, max_age: int = COOKIE_MAX_AGE) -> None:
     resp.set_cookie(name, value, max_age=max_age, httponly=True, samesite="Lax",
                     secure=request.is_secure or request.headers.get("X-Forwarded-Proto") == "https")
 

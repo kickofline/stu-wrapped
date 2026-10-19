@@ -94,8 +94,8 @@ button { font: inherit; }
 .chip code { flex: 1; font-family: var(--font); font-weight: 700; font-size: 1rem; word-break: break-all; }
 .chip button { flex: none; background: var(--accent); color: var(--navy-lo); font-weight: 800; border: 0; border-radius: 10px; padding: .55rem .9rem; cursor: pointer; }
 .landing .cta { font-size: 1.25rem; padding: 1.1rem 2.2rem; }
+.campus-link { margin-top: clamp(.9rem, 3dvh, 2rem); padding: .65rem 1.3rem; font-size: .95rem; }
 .fine-print { margin-top: clamp(.6rem, 2.2dvh, 2rem); color: var(--muted); font-size: .8rem; font-weight: 600; }
-.fine-print a { color: inherit; }
 .returning { display: flex; flex-direction: column; align-items: flex-start; gap: clamp(.8rem, 2.4dvh, 1.2rem); margin-top: clamp(1rem, 4dvh, 2.6rem); }
 .link-button { background: none; border: 0; padding: 0; color: var(--muted); font: 700 .95rem var(--font); text-decoration: underline; cursor: pointer; }
 /* Short screens (phones with browser toolbars, small laptops): tighter type, two-line title. */
@@ -110,6 +110,8 @@ button { font: inherit; }
 @media (max-height: 600px) {
   .steps { gap: .7rem; margin-top: .8rem; }
   .landing .lede { margin-top: .3rem; }
+  .campus-link { margin-top: .25rem; padding: .5rem 1.1rem; }
+  .fine-print { margin-top: .3rem; }
 }
 
 /* ── Waiting ───────────────────────────────────────────────── */
@@ -152,6 +154,7 @@ body:has(.compare-page):has(.flash) .compare-shell { padding-top: 6.5rem; }
 .compare-shell.wide { width: min(100%, 920px); }
 .back-link { display: inline-block; color: rgba(255,255,255,.78); font-weight: 700; text-decoration: none; margin-bottom: 2.4rem; }
 .compare-page h1 { font-size: clamp(3.7rem, 16vw, 6.4rem); margin: 1rem 0 1.5rem; overflow-wrap: anywhere; color: var(--lime); }
+.campus-page h1 { font-size: clamp(1.9rem, 9.6vw, 6.4rem); overflow-wrap: normal; }
 .compare-lead { max-width: 540px; font-size: 1.2rem; font-weight: 700; color: rgba(255,255,255,.78); }
 .compare-form { display: grid; gap: .9rem; margin-top: 2rem; }
 .compare-form label { font-weight: 800; }
@@ -196,7 +199,7 @@ body:has(.compare-page):has(.flash) .compare-shell { padding-top: 6.5rem; }
 .shared-card li span, .ranked-card li span { flex: none; display: inline-flex; width: 1.8rem; height: 1.8rem; align-items: center; justify-content: center; border-radius: 50%; background: #ffe14d; color: #2a0f00; font: 800 .85rem var(--font); }
 .compare-actions { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: 1.2rem; }
 
-/* ── Campus Wrapped ────────────────────────────────────────── */
+/* ── Campus Leaderboard ────────────────────────────────────── */
 .campus-page { background: #2d46b9; }
 .campus-page .blob.b1 { background: #4762d6; }
 .campus-page .blob.b2 { background: #22389a; }
