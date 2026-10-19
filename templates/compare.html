@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ left.first_name }} + {{ right.first_name }} · OBU Stu Wrapped{% endblock %}
+
+{% block meta %}
+<meta name="theme-color" content="#6c2bd9">
+<meta name="description" content="{{ left.first_name }} and {{ right.first_name }} compared their OBU dining Wrapped.">
+<meta property="og:title" content="{{ left.first_name }} + {{ right.first_name }} · {{ match.vibe }}">
+<meta property="og:description" content="{{ match.compatibility }}% menu match · Compare your OBU Stu Wrapped.">
+<meta property="og:url" content="{{ share_url }}">
+<meta property="og:image" content="{{ url_for('og_site', _external=True, _scheme='https') }}">
+<meta name="twitter:card" content="summary_large_image">
+{% endblock %}
+
+{% macro money(value) %}${{ "{:,.2f}".format(value) }}{% endmacro %}
+{% macro profile(person, side) %}
+<section class="friend-profile {{ side }}">
+  <p class="card-label">{{ person.first_name }}</p>
+  <h2 class="display">{{ person.top_item }}</h2>
+  <dl>
+    <div><dt>Flex spend</dt><dd>{{ money(person.total_spend) }}</dd></div>
+    <div><dt>Food visits</dt><dd>{{ person.visits }}</dd></div>
+    <div><dt>Caf swipes</dt><dd>{{ person.caf_swipes }}</dd></div>
+  </dl>
+  {% if person.badges %}<p class="profile-badge">{{ person.badges[0].title }}</p>{% endif %}
+  <a href="{{ url_for('wrapped', share_id=person.share_id) }}">View Wrapped</a>
+</section>
+{% endmacro %}
+
+{% block content %}
+<main class="compare-page compare-result">
+  <i class="blob b1"></i><i class="blob b2"></i>
+  <div class="compare-shell wide">
+    <p class="eyebrow">{{ left.first_name }} + {{ right.first_name }}</p>
+    <h1 class="display">{{ match.vibe }}</h1>
+    <div class="match-score"><strong>{{ match.compatibility }}%</strong><span>menu match</span></div>
+
+    <div class="profiles">
+      {{ profile(left, 'left') }}
+      {{ profile(right, 'right') }}
+    </div>
+
+    {% if match.likely_meals %}
+    <section class="caf-buddy card">
+      <p class="card-label">Likely ate together</p>
+      <strong>{{ match.likely_meals }}</strong>
+      <p>same-minute Caf arrival{{ 's' if match.likely_meals != 1 }}</p>
+      <ul>{% for moment in match.likely_meal_times %}<li>{{ moment }}</li>{% endfor %}</ul>
+      <small>Atrium records the minute, not the second, so this is a clue—not proof.</small>
+    </section>
+    {% endif %}
+
+    <section class="shared-card card">
+      <p class="card-label">Shared favorites</p>
+      {% if match.shared %}
+      <ol>{% for item in match.shared %}<li><span>{{ loop.index }}</span>{{ item }}</li>{% endfor %}</ol>
+      {% else %}
+      <p>No overlapping favorites. You really are ordering from opposite menus.</p>
+      {% endif %}
+    </section>
+
+    <div class="compare-actions">
+      <button class="btn-primary" id="share-compare" type="button">Share matchup</button>
+      <a class="btn-secondary" href="{{ url_for('compare_start', share_id=left.share_id) }}">Compare someone else</a>
+    </div>
+  </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const COMPARE_SHARE_URL = {{ share_url | tojson }};
+  const COMPARE_SHARE_TITLE = {{ share_title | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/compare.js') }}"></script>
+{% endblock %}

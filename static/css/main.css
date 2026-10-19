@@ -114,3 +114,63 @@ button { font: inherit; }
 .error-box .btn-primary { background: #ffe14d; }
 .spinner { width: 46px; height: 46px; border-radius: 50%; border: 5px solid rgba(255,255,255,.3); border-top-color: #fff; animation: spin .9s linear infinite; margin-bottom: 1.6rem; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Friend comparison ─────────────────────────────────────── */
+.compare-page {
+  position: relative;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: #6c2bd9;
+}
+.compare-page .blob.b1 { width: 430px; height: 430px; top: -220px; right: -180px; background: #8550ec; }
+.compare-page .blob.b2 { width: 330px; height: 330px; bottom: -150px; left: -150px; background: #5420b4; }
+.compare-shell { position: relative; width: min(100%, 620px); margin: 0 auto; padding: 2.5rem 1.35rem 4rem; }
+.compare-shell.wide { width: min(100%, 920px); }
+.back-link { display: inline-block; color: rgba(255,255,255,.78); font-weight: 700; text-decoration: none; margin-bottom: 2.4rem; }
+.compare-page h1 { font-size: clamp(3.7rem, 16vw, 6.4rem); margin: 1rem 0 1.5rem; overflow-wrap: anywhere; color: var(--lime); }
+.compare-lead { max-width: 540px; font-size: 1.2rem; font-weight: 700; color: rgba(255,255,255,.78); }
+.compare-form { display: grid; gap: .9rem; margin-top: 2rem; }
+.compare-form label { font-weight: 800; }
+.compare-form input {
+  width: 100%; border: 1px solid rgba(255,255,255,.24); border-radius: 12px;
+  padding: 1rem; background: rgba(0,0,0,.18); color: #fff; font: inherit;
+}
+.compare-form input::placeholder { color: rgba(255,255,255,.48); }
+.compare-form input:focus { outline: 3px solid var(--lime); outline-offset: 2px; }
+.invite-card { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1.2rem; }
+.invite-card h2 { font-family: var(--display); font-size: 1.8rem; line-height: 1; margin: .25rem 0; }
+.card-label { font-size: .8rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; opacity: .72; }
+
+.compare-result { background: #f037a5; }
+.compare-result .blob.b1 { background: #f564bb; }
+.compare-result .blob.b2 { background: #cf2689; }
+.compare-result h1 { max-width: 760px; }
+.match-score { display: flex; align-items: baseline; gap: .8rem; margin: 1rem 0 2rem; }
+.match-score strong { font-family: var(--display); font-size: clamp(4rem, 14vw, 7rem); line-height: .8; color: #ffe14d; }
+.match-score span { font-size: 1.3rem; font-weight: 800; }
+.profiles { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.friend-profile { min-width: 0; padding: 1.5rem; border-radius: 20px; background: #2d46b9; overflow: hidden; }
+.friend-profile.right { background: #ff7a1a; }
+.friend-profile h2 { font-size: clamp(1.65rem, 5vw, 2.5rem); color: #f4ff5c; margin: .65rem 0 1.25rem; overflow-wrap: anywhere; }
+.friend-profile dl { display: grid; gap: .8rem; }
+.friend-profile dl div { display: flex; justify-content: space-between; gap: .75rem; border-top: 1px solid rgba(255,255,255,.18); padding-top: .7rem; }
+.friend-profile dt { color: rgba(255,255,255,.72); font-weight: 700; }
+.friend-profile dd { font-weight: 900; text-align: right; }
+.profile-badge { display: inline-block; margin-top: 1.2rem; border-radius: 999px; padding: .45rem .7rem; background: rgba(0,0,0,.16); font-weight: 800; }
+.friend-profile a { display: block; color: #fff; font-weight: 800; margin-top: 1rem; }
+.caf-buddy { margin-top: 1rem; background: #19e68c; color: #0d1f12; }
+.caf-buddy > strong { display: block; font-family: var(--display); font-size: clamp(4rem, 14vw, 7rem); line-height: .85; margin-top: .8rem; }
+.caf-buddy > p:not(.card-label) { font-size: 1.25rem; font-weight: 800; }
+.caf-buddy ul { list-style: none; display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+.caf-buddy li { border-radius: 999px; padding: .4rem .65rem; background: rgba(0,0,0,.09); font-weight: 800; }
+.caf-buddy small { display: block; margin-top: 1rem; font-weight: 700; opacity: .68; }
+.shared-card { margin-top: 1rem; }
+.shared-card ol { list-style: none; display: grid; gap: .7rem; margin-top: .8rem; }
+.shared-card li { font-family: var(--display); font-size: clamp(1.25rem, 4vw, 2rem); line-height: 1.05; }
+.shared-card li span { display: inline-flex; width: 1.8rem; height: 1.8rem; align-items: center; justify-content: center; border-radius: 50%; background: #ffe14d; color: #2a0f00; font: 800 .85rem var(--font); margin-right: .65rem; }
+.compare-actions { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: 1.2rem; }
+
+@media (max-width: 620px) {
+  .invite-card { align-items: flex-start; flex-direction: column; }
+  .profiles { grid-template-columns: 1fr; }
+}

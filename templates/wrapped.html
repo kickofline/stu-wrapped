@@ -70,6 +70,27 @@
     </div></section>
     {% endif %}
 
+    <!-- ── Signature order ──────────────────────────────────── -->
+    {% if usual %}
+    <section class="slide t-green l2"><div class="frame">
+      {{ blobs() }}
+      <div class="body center">
+        <p class="eyebrow">Your usual</p>
+        <div class="usual-list">
+          {% for item in usual['items'] %}
+          <div>
+            <h2 class="display">{% if item.qty > 1 %}{{ item.qty }}× {% endif %}{{ item.name }}</h2>
+            {% if item.detail %}<p>{{ item.detail }}</p>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        <p class="lead">You ordered it {{ usual.count }} times.</p>
+        <p class="sub">{{ money(usual.spent) }} total · {{ money(usual.average) }} each time</p>
+      </div>
+      {{ foot() }}
+    </div></section>
+    {% endif %}
+
     <!-- ── Dining personality ────────────────────────────────── -->
     {% if ai %}
     <section class="slide t-purple l4"><div class="frame">
@@ -78,6 +99,26 @@
         <p class="eyebrow">Your dining personality</p>
         <h2 class="display ac" style="--fs: {{ 72 if ai.personality.title | length > 18 else 84 }}">{{ ai.personality.title }}</h2>
         <p class="text">{{ ai.personality.description }}</p>
+      </div>
+      {{ foot() }}
+    </div></section>
+    {% endif %}
+
+    <!-- ── Deterministic badges ─────────────────────────────── -->
+    {% if badges %}
+    <section class="slide t-orange l3"><div class="frame">
+      {{ blobs() }}
+      <div class="body center">
+        <p class="eyebrow">Badges earned</p>
+        <h2 class="display ac" style="--fs: 66">Your dining<br>reputation</h2>
+        <div class="badge-stack">
+          {% for badge in badges %}
+          <div class="badge-row">
+            <strong>{{ badge.mark }}</strong>
+            <div><h3>{{ badge.title }}</h3><p>{{ badge.description }}</p></div>
+          </div>
+          {% endfor %}
+        </div>
       </div>
       {{ foot() }}
     </div></section>
@@ -208,16 +249,22 @@
     </div></section>
     {% endif %}
 
-    <!-- ── Compared with other students ──────────────────────── -->
-    {% if compare %}
+    <!-- ── Campus percentiles (three-student minimum) ───────── -->
+    {% if campus %}
     <section class="slide t-pink l4"><div class="frame">
       {{ blobs() }}
       <div class="body center">
-        <p class="eyebrow">You ordered more than</p>
-        <p class="display ac" style="--fs: 160">{{ compare.pct_rank }}%</p>
-        <p class="lead">of the {{ compare.runs }} OBU students who've wrapped so far.</p>
-        <p class="sub">Average: {{ compare.avg_qty }} items{% if compare.avg_spend %} · {{ money(compare.avg_spend) }}{% endif %}. You: {{ total_qty }} items · {{ money(total_spend) }}.</p>
-        {% if compare.most_common_top %}<p class="sub">Most common #1 on campus: <b>{{ compare.most_common_top }}</b></p>{% endif %}
+        <p class="eyebrow">How you stack up</p>
+        <h2 class="display ac" style="--fs: 68">Campus<br>rankings</h2>
+        <div class="rank-stack">
+          {% for rank in campus %}
+          <div class="rank-row">
+            <strong>Top {{ rank.top }}%</strong>
+            <div><h3>{{ rank.label }}</h3><p>{{ rank.detail }}</p></div>
+          </div>
+          {% endfor %}
+        </div>
+        <p class="sub">Shown only when at least 3 students qualify.</p>
       </div>
       {{ foot() }}
     </div></section>
@@ -264,6 +311,7 @@
           <button class="btn-primary js-share-link">Share my Wrapped</button>
           <a class="btn-secondary" href="{{ url_for('index') }}">Get your own</a>
           <a class="btn-secondary" href="{{ dashboard_url }}">All my items</a>
+          <a class="btn-secondary" href="{{ compare_url }}">Compare with a friend</a>
         </div>
       </div>
       {{ foot() }}

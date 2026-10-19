@@ -120,6 +120,19 @@ body:has(.viewer) { transition: background-color .5s ease; }
 .list li { font-weight: 800; font-size: calc(21 * var(--u)); line-height: 1.35; padding-left: calc(30 * var(--u)); position: relative; }
 .list li::before { content: '→'; position: absolute; left: 0; color: var(--ac); }
 
+.usual-list { display: grid; gap: calc(10 * var(--u)); margin: calc(18 * var(--u)) 0 calc(22 * var(--u)); }
+.usual-list > div { background: var(--chip); border-radius: calc(14 * var(--u)); padding: calc(13 * var(--u)) calc(17 * var(--u)); }
+.usual-list .display { font-size: calc(30 * var(--u)); line-height: 1; margin: 0; color: var(--fg); }
+.usual-list p { margin-top: calc(5 * var(--u)); font-size: calc(16 * var(--u)); font-weight: 700; opacity: .72; }
+
+.badge-stack, .rank-stack { display: grid; gap: calc(12 * var(--u)); margin-top: calc(20 * var(--u)); }
+.badge-row, .rank-row { display: grid; grid-template-columns: calc(70 * var(--u)) 1fr; align-items: center; gap: calc(14 * var(--u)); background: var(--chip); border-radius: calc(16 * var(--u)); padding: calc(14 * var(--u)); }
+.badge-row > strong { display: flex; align-items: center; justify-content: center; width: calc(58 * var(--u)); height: calc(58 * var(--u)); border-radius: 50%; background: var(--ac); color: var(--bg); font-size: calc(16 * var(--u)); }
+.badge-row h3, .rank-row h3 { font-size: calc(22 * var(--u)); line-height: 1.05; }
+.badge-row p, .rank-row p { margin-top: calc(4 * var(--u)); font-size: calc(16 * var(--u)); font-weight: 700; line-height: 1.25; opacity: .75; }
+.rank-row { grid-template-columns: calc(110 * var(--u)) 1fr; }
+.rank-row > strong { font-family: var(--display); font-size: calc(28 * var(--u)); line-height: .95; color: var(--ac); }
+
 /* summary card */
 .summary .eyebrow.plain { color: var(--fg); }
 .summary .grid { display: grid; grid-template-columns: 1fr 1fr; gap: calc(16 * var(--u)) calc(22 * var(--u)); margin-top: calc(22 * var(--u)); }
@@ -139,7 +152,7 @@ body:has(.viewer) { transition: background-color .5s ease; }
 
 /* entrance motion */
 .slide.active .display, .slide.active .stat { animation: rise .55s cubic-bezier(.2,.9,.3,1.2) both; }
-.slide.active .lead, .slide.active .text, .slide.active .sub, .slide.active .panel, .slide.active .list, .slide.active .bars-list, .slide.active .cols, .slide.active .grid { animation: fade .5s ease .15s both; }
+.slide.active .lead, .slide.active .text, .slide.active .sub, .slide.active .panel, .slide.active .list, .slide.active .bars-list, .slide.active .cols, .slide.active .grid, .slide.active .usual-list, .slide.active .badge-stack, .slide.active .rank-stack { animation: fade .5s ease .15s both; }
 @keyframes rise { from { opacity: 0; transform: translateY(18px); } }
 @keyframes fade { from { opacity: 0; transform: translateY(8px); } }
 

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Compare with {{ mine.first_name }} · OBU Stu Wrapped{% endblock %}
+
+{% block content %}
+<main class="compare-page compare-start">
+  <i class="blob b1"></i><i class="blob b2"></i>
+  <div class="compare-shell">
+    <a class="back-link" href="{{ url_for('wrapped', share_id=mine.share_id) }}">← Back to {{ mine.first_name }}'s Wrapped</a>
+    <p class="eyebrow">OBU STU WRAPPED · HEAD TO HEAD</p>
+    <h1 class="display">COMPARE<br>YOUR<br>ORDERS</h1>
+    <p class="compare-lead">Paste another Stu Wrapped link. We compare only the totals and favorites already visible in each Wrapped—not raw receipts.</p>
+
+    <form class="compare-form card" method="post">
+      <label for="friend">Friend's Wrapped link or share code</label>
+      <input id="friend" name="friend" required autocomplete="off" placeholder="https://wrapped.drew.place/wrapped/…">
+      <button class="btn-primary" type="submit">See the matchup</button>
+    </form>
+
+    <section class="invite-card card">
+      <div>
+        <p class="card-label">Starting with</p>
+        <h2>{{ mine.first_name }}</h2>
+        <p>{{ mine.top_item }} · {{ mine.visits }} visits</p>
+      </div>
+      <button class="btn-secondary" id="share-compare" type="button">Send invite</button>
+    </section>
+  </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const COMPARE_SHARE_URL = {{ invite_url | tojson }};
+  const COMPARE_SHARE_TITLE = {{ ("Compare your OBU Stu Wrapped with " ~ mine.first_name) | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/compare.js') }}"></script>
+{% endblock %}

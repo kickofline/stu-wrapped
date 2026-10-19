@@ -8,6 +8,7 @@ import threading
 import traceback
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from flask import (Flask, Response, abort, flash, jsonify, redirect,
@@ -18,6 +19,7 @@ load_dotenv()
 import analysis
 import og_image
 from insights import parse_when, spot_name, time_insights
+from social import campus_percentiles, dining_badges, friend_match, item_quantities, signature_order
 from jobs import (active_job_for, claim, claim_waiting, cleanup_old_jobs,
                   create_job, fail, finish, get_job, update_progress)
 from mailbox import (delete_credentials, is_tag, load_credentials, new_tag,
@@ -127,19 +129,31 @@ def _record_raw_items(transactions: list) -> None:
         json.dump(sorted(known_set, key=str.lower), f, indent=2)
 
 
-def _record_run(transactions: list, student_key: str) -> None:
-    """Store this student's latest run in the campus-wide comparison stats."""
+def _student_summary(transactions: list, swipes: list) -> dict:
     items = _aggregate_items(transactions)
+    spots = defaultdict(int)
+    for transaction in transactions:
+        spots[spot_name(transaction["location"])] += 1
+    return {
+        "total_qty": sum(item["qty"] for item in items),
+        "total_spend": round(sum(item["total_spend"] for item in items), 2),
+        "unique_items": len(items),
+        "top_item": items[0]["name"] if items else None,
+        "visits": len(transactions),
+        "caf_swipes": len(swipes),
+        "items": {item["name"]: item["qty"] for item in items},
+        "spots": dict(spots),
+    }
+
+
+def _record_run(transactions: list, swipes: list, student_key: str) -> None:
+    """Store this student's latest run in the campus-wide comparison stats."""
+    summary = _student_summary(transactions, swipes)
+    summary["updated"] = datetime.now().isoformat(timespec="seconds")
     with _stats_lock:
         _record_raw_items(transactions)
         stats = _load_stats()
-        stats["students"][student_key] = {
-            "total_qty": sum(i["qty"] for i in items),
-            "total_spend": round(sum(i["total_spend"] for i in items), 2),
-            "unique_items": len(items),
-            "top_item": items[0]["name"] if items else None,
-            "updated": datetime.now().isoformat(timespec="seconds"),
-        }
+        stats["students"][student_key] = summary
         _save_stats(stats)
 
 
@@ -274,7 +288,7 @@ def _run_job(job_id: str, tag: str, invite: dict) -> None:
 
     update_progress(job_id, 6, "Wrapping it up...")
     share_id = _save_result(transactions, swipes, metadata, ai)
-    _record_run(transactions, student)
+    _record_run(transactions, swipes, student)
     finish(job_id, share_id)
 
 
@@ -437,19 +451,22 @@ def _wrapped_context(share_id: str) -> dict:
     swipes = time_insights(result.get("swipes", []), meta["startdate"], meta["enddate"])
     all_spots = next((g["top"] for g in (times or {}).get("spots", []) if g["meal"] == "All visits"), [])
 
-    # Compare against every student's latest run (only meaningful once others have run).
-    students = list(_load_stats()["students"].values())
-    compare = None
-    if len(students) >= 2:
-        qtys = [s["total_qty"] for s in students]
-        tops = [s["top_item"] for s in students if s["top_item"]]
-        compare = {
-            "pct_rank": round(len([q for q in qtys if q < total_qty]) / len(qtys) * 100),
-            "avg_qty": round(sum(qtys) / len(qtys)),
-            "avg_spend": round(sum(s["total_spend"] for s in students) / len(students), 2),
-            "runs": len(students),
-            "most_common_top": max(set(tops), key=tops.count) if tops else None,
-        }
+    current = _student_summary(transactions, result.get("swipes", []))
+    stored = _load_stats()["students"]
+    student_key = meta.get("student_key")
+    students = []
+    replaced = False
+    for key, summary in stored.items():
+        if student_key and key == student_key:
+            students.append(current)
+            replaced = True
+        else:
+            students.append(summary)
+    if not replaced:
+        students.append(current)
+    campus = campus_percentiles(current, students)
+    usual = signature_order(transactions)
+    badges = dining_badges(transactions, result.get("swipes", []), meta)
 
     name = meta.get("name") or ""
     return {
@@ -470,7 +487,9 @@ def _wrapped_context(share_id: str) -> dict:
         "swipe_top_meal": max(swipes["meal_totals"], key=lambda m: m["count"])["meal"] if swipes else None,
         "flex": _flex_plan(transactions, meta),
         "ai": result.get("analysis"),
-        "compare": compare,
+        "campus": campus,
+        "usual": usual,
+        "badges": badges,
     }
 
 
@@ -483,6 +502,79 @@ def wrapped(share_id):
         dashboard_url=url_for("results", share_id=share_id),
         share_url=url_for("wrapped", share_id=share_id, _external=True, _scheme="https"),
         og_image=url_for("og_result", share_id=share_id, _external=True, _scheme="https"),
+        compare_url=url_for("compare_start", share_id=share_id),
+    )
+
+
+def _comparison_profile(share_id: str) -> dict:
+    result = _load_result(share_id)
+    transactions = result["transactions"]
+    metadata = result["metadata"]
+    items = _aggregate_items(transactions)
+    name = metadata.get("name") or ""
+    year = date.fromisoformat(metadata["startdate"]).year
+    caf_times = [
+        when for swipe in result.get("swipes", [])
+        if (when := parse_when(swipe.get("date", ""), year))
+    ]
+    return {
+        "share_id": share_id,
+        "name": name,
+        "first_name": name.split()[0] if name else "Student",
+        "total_spend": round(sum(item["total_spend"] for item in items), 2),
+        "visits": len(transactions),
+        "caf_swipes": len(result.get("swipes", [])),
+        "top_item": items[0]["name"] if items else "No favorite yet",
+        "items": {item["name"]: item["qty"] for item in items},
+        "usual": signature_order(transactions),
+        "badges": dining_badges(transactions, result.get("swipes", []), metadata),
+        "_student_key": metadata.get("student_key"),
+        "_caf_times": caf_times,
+    }
+
+
+def _share_id_from_input(value: str) -> str | None:
+    value = (value or "").strip().rstrip("/")
+    if _SHARE_ID_RE.fullmatch(value):
+        return value
+    path = urlparse(value).path.rstrip("/")
+    candidate = path.rsplit("/", 1)[-1]
+    return candidate if _SHARE_ID_RE.fullmatch(candidate) else None
+
+
+@app.route("/compare/<share_id>", methods=["GET", "POST"])
+def compare_start(share_id):
+    mine = _comparison_profile(share_id)
+    if request.method == "POST":
+        other_id = _share_id_from_input(request.form.get("friend", ""))
+        if not other_id or not os.path.isfile(os.path.join(RESULTS_DIR, f"{other_id}.json")):
+            flash("Paste a valid Stu Wrapped link or 12-character share code.", "error")
+        elif other_id == share_id:
+            flash("That is the same Wrapped. Ask a friend for theirs!", "error")
+        else:
+            return redirect(url_for("compare_results", left_id=share_id, right_id=other_id))
+    invite_url = url_for("compare_start", share_id=share_id, _external=True, _scheme="https")
+    return render_template("compare_start.html", mine=mine, invite_url=invite_url)
+
+
+@app.get("/compare/<left_id>/<right_id>")
+def compare_results(left_id, right_id):
+    if left_id == right_id:
+        flash("Pick two different Wrapped links to compare.", "error")
+        return redirect(url_for("compare_start", share_id=left_id))
+    left = _comparison_profile(left_id)
+    right = _comparison_profile(right_id)
+    if left["_student_key"] and left["_student_key"] == right["_student_key"]:
+        flash("Those links belong to the same student. Ask a friend for theirs!", "error")
+        return redirect(url_for("compare_start", share_id=left_id))
+    match = friend_match(left, right)
+    share_url = url_for(
+        "compare_results", left_id=left_id, right_id=right_id,
+        _external=True, _scheme="https",
+    )
+    return render_template(
+        "compare.html", left=left, right=right, match=match, share_url=share_url,
+        share_title=f"{left['first_name']} + {right['first_name']} · OBU Stu Wrapped",
     )
 
 
