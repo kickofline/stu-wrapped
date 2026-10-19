@@ -1,8 +1,9 @@
-"""Time-based slide stats (earliest/latest purchase, favorite spots by meal, busiest weekdays).
+"""Time-based slide stats (earliest/latest, favorite spots by meal, busiest weekdays)
+for any list of {date, location} events: Flex purchases or meal-plan swipes.
 
-Atrium's statement shows each purchase's timestamp as display text, so dates
-are parsed leniently. Transactions whose text has no recognizable date and
-time are left out of these slides rather than guessed at.
+Atrium's statement shows each timestamp as display text, so dates are parsed
+leniently. Events whose text has no recognizable date and time are left out of
+these slides rather than guessed at.
 """
 import re
 from collections import Counter
@@ -17,6 +18,12 @@ _MONTHS = {m: i for i, m in enumerate(
 WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 MEALS = (("Breakfast", 0, 10 * 60 + 30), ("Lunch", 10 * 60 + 30, 16 * 60), ("Dinner", 16 * 60, 24 * 60))
 LATE_NIGHT_CUTOFF = 4 * 60  # purchases before 4 AM count as the previous night's latest
+_REGISTER = re.compile(r"\s+(?:PAX\s+)?\d+$", re.IGNORECASE)
+
+
+def spot_name(location: str) -> str:
+    """Atrium names each register ("CFA 2", "Commons PAX 4"); fold them into one spot."""
+    return _REGISTER.sub("", location)
 
 
 def parse_when(text: str, default_year: int) -> datetime | None:
@@ -58,10 +65,9 @@ def _weekday_counts(start: date, end: date) -> Counter:
     return days
 
 
-def time_insights(transactions: list, startdate: str, enddate: str) -> dict | None:
+def time_insights(events: list, startdate: str, enddate: str) -> dict | None:
     start, end = date.fromisoformat(startdate), date.fromisoformat(enddate)
-    # Atrium names each register ("CFA 1", "CFA 2"); count them as one spot.
-    timed = [(parse_when(tx["date"], start.year), re.sub(r"\s+\d+$", "", tx["location"])) for tx in transactions]
+    timed = [(parse_when(e["date"], start.year), spot_name(e["location"])) for e in events]
     timed = [(when, loc) for when, loc in timed if when]
     if not timed:
         return None
@@ -93,6 +99,8 @@ def time_insights(transactions: list, startdate: str, enddate: str) -> dict | No
         return {"time": when.strftime("%I:%M %p").lstrip("0"), "date": f"{when:%B} {when.day}, {when.year}", "location": loc}
 
     return {
+        "count": len(timed),
+        "meal_totals": [{"meal": meal, "count": sum(counts.values())} for meal, counts in by_meal.items()],
         "earliest": moment(earliest),
         "latest": moment(latest),
         "spots": [

@@ -14,14 +14,15 @@ from flask import (Flask, Response, abort, flash, jsonify, redirect,
 
 load_dotenv()
 
-from insights import time_insights
+import analysis
+from insights import spot_name, time_insights
 from jobs import (active_job_for, claim, claim_waiting, cleanup_old_jobs,
                   create_job, fail, finish, get_job, update_progress)
 from mailbox import (delete_credentials, is_tag, load_credentials, new_tag,
                      parse_invite, plus_address, save_credentials,
                      tag_from_recipient)
 from name_map import expand_name
-from scraper import LoginFailed, LoginLimited, NoAccounts, fetch_transactions
+from scraper import LoginFailed, LoginLimited, NoAccounts, fetch_activity
 
 app = Flask(__name__)
 app.secret_key = "LUKERMKNGAONMXXMGJYAAGYMRIVVECNV"
@@ -54,9 +55,20 @@ def _location_stats(transactions: list, keywords: tuple) -> tuple:
 
 
 def _aggregate_items(transactions: list) -> list[dict]:
-    """Aggregate per-item stats from raw transaction list, sorted by qty desc."""
+    """Aggregate per-item stats, sorted by qty desc.
+
+    Uses DeepSeek's cleaned items (add-ons folded in, menu names) when the run
+    has them, otherwise the raw register lines with name_map expansions."""
     stats: dict = defaultdict(lambda: {"qty": 0, "total_spend": 0.0, "unit_price": None})
     for tx in transactions:
+        if "clean_items" in tx:
+            for item in tx["clean_items"]:
+                s = stats[item["item"]]
+                s["qty"] += item["qty"]
+                s["total_spend"] += item["total"]
+                if s["unit_price"] is None:
+                    s["unit_price"] = round(item["total"] / item["qty"], 2)
+            continue
         for item in tx["items"]:
             if not item.get("unit_price"):  # skip $0 / free / modifier rows
                 continue
@@ -139,11 +151,11 @@ def _semester_dates() -> tuple[str, str, str]:
 
 # ── Results (persisted so share links outlive restarts) ─────────────────────
 
-def _save_result(transactions: list, metadata: dict) -> str:
+def _save_result(transactions: list, swipes: list, metadata: dict, ai: dict | None) -> str:
     os.makedirs(RESULTS_DIR, exist_ok=True)
     share_id = secrets.token_urlsafe(9)
     with open(os.path.join(RESULTS_DIR, f"{share_id}.json"), "w", encoding="utf-8") as f:
-        json.dump({"transactions": transactions, "metadata": metadata}, f)
+        json.dump({"transactions": transactions, "swipes": swipes, "metadata": metadata, "analysis": ai}, f)
     return share_id
 
 
@@ -166,7 +178,7 @@ def _start_job(job_id: str, tag: str, invite: dict) -> None:
 def _run_job(job_id: str, tag: str, invite: dict) -> None:
     startdate, enddate, label = _semester_dates()
     try:
-        transactions = fetch_transactions(
+        transactions, swipes = fetch_activity(
             invite["username"], invite["password"], startdate, enddate,
             progress=lambda step, msg: update_progress(job_id, step, msg),
         )
@@ -189,21 +201,62 @@ def _run_job(job_id: str, tag: str, invite: dict) -> None:
         fail(job_id, "We couldn't load your Flex Bucks history right now. Try again in a few minutes.")
         return
 
-    _log(f"[job {job_id}] fetched {len(transactions)} transactions")
-    if not transactions:
-        fail(job_id, f"We didn't find any Flex Bucks purchases for {label}. "
+    _log(f"[job {job_id}] fetched {len(transactions)} purchases, {len(swipes)} meal swipes")
+    if not transactions and not swipes:
+        fail(job_id, f"We didn't find any Flex Bucks purchases or meal swipes for {label}. "
                      "If you're not on a meal plan, there's nothing to wrap yet!")
         return
 
-    update_progress(job_id, 5, "Wrapping it up...")
     metadata = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "startdate": startdate, "enddate": enddate,
         "name": invite.get("name"),
     }
-    share_id = _save_result(transactions, metadata)
+    ai = None
+    if analysis.enabled():
+        update_progress(job_id, 5, "Asking DeepSeek to decode your orders...")
+        try:
+            analysis.normalize(transactions)
+            ai = analysis.analyze(_summary(transactions, swipes, metadata, label))
+        except Exception:
+            _log(f"[job {job_id}] DeepSeek pass failed, continuing without it:\n{traceback.format_exc()}")
+
+    update_progress(job_id, 6, "Wrapping it up...")
+    share_id = _save_result(transactions, swipes, metadata, ai)
     _record_run(transactions)
     finish(job_id, share_id)
+
+
+def _summary(transactions: list, swipes: list, metadata: dict, label: str) -> dict:
+    """Aggregated stats handed to DeepSeek for the personality/roast/money slides."""
+    items = _aggregate_items(transactions)
+    spots = defaultdict(lambda: {"visits": 0, "spend": 0.0})
+    for tx in transactions:
+        spot = spots[spot_name(tx["location"])]
+        spot["visits"] += 1
+        spot["spend"] += tx["grand_total"]
+    total_spend = round(sum(tx["grand_total"] for tx in transactions), 2)
+    times = time_insights(transactions, metadata["startdate"], metadata["enddate"])
+    swipe_stats = time_insights(swipes, metadata["startdate"], metadata["enddate"])
+    return {
+        "semester": label,
+        "visits": len(transactions),
+        "total_spend": total_spend,
+        "avg_per_visit": round(total_spend / len(transactions), 2) if transactions else 0,
+        "top_items": [{k: i[k] for k in ("name", "qty", "total_spend")} for i in items[:10]],
+        "unique_items": len(items),
+        "spots": {k: {"visits": v["visits"], "spend": round(v["spend"], 2)} for k, v in spots.items()},
+        "earliest": times and times["earliest"],
+        "latest": times and times["latest"],
+        "avg_visits_per_weekday": times and {w["day"]: w["avg"] for w in times["weekdays"]},
+        "meal_swipes": swipe_stats and {
+            "total": swipe_stats["count"],
+            "by_meal": {m["meal"]: m["count"] for m in swipe_stats["meal_totals"]},
+            "avg_per_weekday": {w["day"]: w["avg"] for w in swipe_stats["weekdays"]},
+            "earliest": swipe_stats["earliest"],
+            "latest": swipe_stats["latest"],
+        },
+    }
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -362,6 +415,8 @@ def wrapped(share_id):
         drjacks_qty=drjacks_qty,
         drjacks_spend=drjacks_spend,
         times=time_insights(transactions, meta["startdate"], meta["enddate"]),
+        swipes=time_insights(result.get("swipes", []), meta["startdate"], meta["enddate"]),
+        ai=result.get("analysis"),
         total_runs=stats["total_runs"],
         pct_rank=pct_rank,
         avg_qty=avg_qty,

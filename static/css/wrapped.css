@@ -363,6 +363,52 @@ body:has(.wrapped-container) .top-nav { display: none; }
 .clock-time  { font-size: clamp(1.4rem, 5vw, 2.5rem); font-weight: 800; }
 .clock-date  { font-size: clamp(.9rem, 2.5vw, 1.2rem); font-weight: 600; opacity: .85; }
 
+/* ── Meal swipes ───────────────────────────────────────────── */
+.slide-swipes { background: linear-gradient(160deg, #023e8a 0%, #0077b6 55%, #00b4d8 100%); text-align: center; gap: .4rem; }
+.swipe-meals  { display: flex; flex-direction: column; gap: .5rem; width: min(560px, 100%); margin-top: 1.5rem; }
+
+/* ── DeepSeek slides ───────────────────────────────────────── */
+.slide-ai { text-align: center; gap: 1rem; }
+.slide-personality { background: linear-gradient(150deg, #3a0ca3 0%, #7209b7 55%, #f72585 100%); }
+.slide-roast       { background: linear-gradient(150deg, #9d0208 0%, #dc2f02 60%, #f48c06 100%); }
+.slide-money       { background: linear-gradient(150deg, #004b23 0%, #007f5f 60%, #2b9348 100%); }
+
+.ai-title {
+  font-size: clamp(2rem, 8vw, 4.5rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: #fff;
+}
+
+.ai-text {
+  max-width: 36rem;
+  font-size: clamp(1rem, 3vw, 1.35rem);
+  line-height: 1.45;
+  color: rgba(255,255,255,.92);
+}
+
+.ai-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: .9rem;
+  max-width: 34rem;
+  text-align: left;
+}
+
+.ai-list li {
+  font-size: clamp(.95rem, 2.8vw, 1.2rem);
+  line-height: 1.4;
+  color: #fff;
+  padding-left: 1.3rem;
+  position: relative;
+}
+
+.ai-list li::before { content: '→'; position: absolute; left: 0; opacity: .7; }
+.slide.active .ai-title { animation: nameSlideIn .6s cubic-bezier(.34, 1.56, .64, 1) .15s both; }
+.slide.active .ai-text, .slide.active .ai-list { animation: subtitleFade .5s ease .45s both; }
+
 /* ── Outro ─────────────────────────────────────────────────── */
 .slide-outro {
   background: radial-gradient(ellipse at 70% 60%, #1a1a2e 0%, #0a0a0a 70%);

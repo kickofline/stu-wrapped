@@ -10,7 +10,7 @@ import secrets
 import threading
 from datetime import datetime, timedelta
 
-TOTAL_STEPS = 5
+TOTAL_STEPS = 6
 WAITING_MESSAGE = "Waiting for your Flex Bucks invite email..."
 
 JOBS: dict[str, dict] = {}

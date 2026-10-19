@@ -4,6 +4,36 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/wrapped.css') }}">
 {% endblock %}
 
+{% macro clock_slide(t, early, late) %}
+  <div class="slide slide-clock">
+    <div class="clock-half clock-early">
+      <p class="cfa-logo">🐛</p>
+      <p class="clock-label">{{ early }}</p>
+      <p class="clock-time">{{ t.earliest.time }} at {{ t.earliest.location }}</p>
+      <p class="clock-date">{{ t.earliest.date }}</p>
+    </div>
+    <div class="clock-half clock-late">
+      <p class="cfa-logo">🦉</p>
+      <p class="clock-label">{{ late }}</p>
+      <p class="clock-time">{{ t.latest.time }} at {{ t.latest.location }}</p>
+      <p class="clock-date">{{ t.latest.date }}</p>
+    </div>
+  </div>
+{% endmacro %}
+
+{% macro weekday_slide(t, title) %}
+  <div class="slide slide-weekdays">
+    <h2 class="chart-title">{{ title }}</h2>
+    {% for w in t.weekdays %}
+    <div class="bar-row">
+      <span class="bar-label">{{ w.day }}</span>
+      <span class="bar" style="--w: {{ (w.avg / t.max_weekday_avg * 100) | round(1) }}%"></span>
+      <span class="bar-value">{{ w.avg }}</span>
+    </div>
+    {% endfor %}
+  </div>
+{% endmacro %}
+
 {% block content %}
 
 <div class="wrapped-container">
@@ -77,6 +107,15 @@
   </div>
   {% endfor %}
 
+  {% if ai %}
+  <!-- ── DeepSeek: dining personality ──────────────────────── -->
+  <div class="slide slide-ai slide-personality">
+    <p class="stats-label">Your dining personality</p>
+    <h2 class="ai-title">{{ ai.personality.title }}</h2>
+    <p class="ai-text">{{ ai.personality.description }}</p>
+  </div>
+  {% endif %}
+
   {% if times %}
   <!-- ── Favorite spots by meal ────────────────────────────── -->
   <div class="slide slide-spots">
@@ -96,33 +135,34 @@
     {% endfor %}
   </div>
 
-  <!-- ── Earliest / latest ─────────────────────────────────── -->
-  <div class="slide slide-clock">
-    <div class="clock-half clock-early">
-      <p class="cfa-logo">🐛</p>
-      <p class="clock-label">Your earliest bite</p>
-      <p class="clock-time">{{ times.earliest.time }} at {{ times.earliest.location }}</p>
-      <p class="clock-date">{{ times.earliest.date }}</p>
-    </div>
-    <div class="clock-half clock-late">
-      <p class="cfa-logo">🦉</p>
-      <p class="clock-label">Your latest bite</p>
-      <p class="clock-time">{{ times.latest.time }} at {{ times.latest.location }}</p>
-      <p class="clock-date">{{ times.latest.date }}</p>
+  <!-- ── Earliest / latest purchase ────────────────────────── -->
+  {{ clock_slide(times, "Your earliest bite", "Your latest bite") }}
+
+  <!-- ── Purchases per weekday ─────────────────────────────── -->
+  {{ weekday_slide(times, "Average visits per day") }}
+  {% endif %}
+
+  {% if swipes %}
+  <!-- ── Meal swipes (dining hall) ─────────────────────────── -->
+  <div class="slide slide-swipes">
+    <p class="stats-label">You swiped into the dining hall</p>
+    <p class="stats-big">{{ swipes.count }}</p>
+    <p class="stats-label">times this semester</p>
+    {% set top_meal = swipes.meal_totals | map(attribute='count') | max %}
+    <div class="swipe-meals">
+      {% for m in swipes.meal_totals %}
+      <div class="bar-row">
+        <span class="bar-label">{{ m.meal }}</span>
+        <span class="bar" style="--w: {{ (m.count / (top_meal or 1) * 100) | round(1) }}%"></span>
+        <span class="bar-value">{{ m.count }}</span>
+      </div>
+      {% endfor %}
     </div>
   </div>
 
-  <!-- ── Purchases per weekday ─────────────────────────────── -->
-  <div class="slide slide-weekdays">
-    <h2 class="chart-title">Average visits per day</h2>
-    {% for w in times.weekdays %}
-    <div class="bar-row">
-      <span class="bar-label">{{ w.day }}</span>
-      <span class="bar" style="--w: {{ (w.avg / times.max_weekday_avg * 100) | round(1) }}%"></span>
-      <span class="bar-value">{{ w.avg }}</span>
-    </div>
-    {% endfor %}
-  </div>
+  {{ clock_slide(swipes, "Your earliest swipe", "Your latest swipe") }}
+
+  {{ weekday_slide(swipes, "Average swipes per day") }}
   {% endif %}
 
   <!-- ── CFA slide (conditional) ──────────────────────────── -->
@@ -170,6 +210,23 @@
     {% else %}
       <p class="item-badge">Occasional coffee drinker</p>
     {% endif %}
+  </div>
+  {% endif %}
+
+  {% if ai %}
+  <!-- ── DeepSeek: roast ───────────────────────────────────── -->
+  <div class="slide slide-ai slide-roast">
+    <p class="cfa-logo">🔥</p>
+    <h2 class="ai-title">The roast</h2>
+    <p class="ai-text">{{ ai.roast }}</p>
+  </div>
+
+  <!-- ── DeepSeek: money ───────────────────────────────────── -->
+  <div class="slide slide-ai slide-money">
+    <h2 class="chart-title">Money talk 💸</h2>
+    <ul class="ai-list">
+      {% for line in ai.money %}<li>{{ line }}</li>{% endfor %}
+    </ul>
   </div>
   {% endif %}
 

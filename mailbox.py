@@ -1,10 +1,11 @@
 """Per-browser plus-address inboxes and the Flex Bucks guest-invite emails sent to them.
 
-Each browser gets a random tag (kept in a cookie). The student invites
+Each browser gets a short random tag (kept in a cookie). The student invites
 cafwrapped+<tag>@wrapped.drew.place as a Flex Bucks guest; the Cloudflare Email
 Worker forwards the raw invite to /api/inbound, which parses it here and stores
 the guest login under that tag so the same browser can re-run later without
-inviting again. Tags are random, so knowing a student ID reveals nothing.
+inviting again. Tags are 6 hex characters: short enough to type, and with ~2000
+OBU students collisions and guessing don't matter for meal-plan data.
 """
 import json
 import os
@@ -18,15 +19,16 @@ from bs4 import BeautifulSoup
 DOMAIN = "wrapped.drew.place"
 CREDENTIALS_DIR = os.path.join(os.path.dirname(__file__), "data", "credentials")
 
-_TAG_RE = re.compile(r"^[0-9a-f]{16}$")
-_RECIPIENT_RE = re.compile(r"cafwrapped\+([0-9a-f]{16})@", re.IGNORECASE)
+# 6 hex for new tags; 16 accepts invites sent to the longer tags used briefly before.
+_TAG_RE = re.compile(r"^(?:[0-9a-f]{6}|[0-9a-f]{16})$")
+_RECIPIENT_RE = re.compile(r"cafwrapped\+([0-9a-f]{16}|[0-9a-f]{6})@", re.IGNORECASE)
 _USERNAME_RE = re.compile(r"(?:username|login)\s*:\s*(\S+)", re.IGNORECASE)
 _PASSWORD_RE = re.compile(r"password\s*:\s*(\S+)", re.IGNORECASE)
 _NAME_RE = re.compile(r"\bname\s*:\s*([A-Za-z][A-Za-z .'-]*?)\s*(?:https?://|\n|$)", re.IGNORECASE)
 
 
 def new_tag() -> str:
-    return secrets.token_hex(8)
+    return secrets.token_hex(3)
 
 
 def is_tag(value: str | None) -> bool:

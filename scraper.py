@@ -111,18 +111,22 @@ def build_statement_url(skey, startdate, enddate, acct):
     return f"{STATEMENT_BASE}?{urlencode(params)}"
 
 
-def list_accounts(session: requests.Session, skey: str) -> list[str]:
-    """Account ids the guest may view, from the statement page's account picker."""
+def list_accounts(session: requests.Session, skey: str) -> list[tuple[str, str]]:
+    """(id, name) of each account the guest may view, from the statement page's account picker,
+    e.g. ("1", "Resident Flex"), ("2", "Resident Meals")."""
     resp = session.get(f"{ACCOUNT_HOST}/statementnew.php", params={"skey": skey, "cid": CID}, timeout=TIMEOUT)
     resp.raise_for_status()
     picker = BeautifulSoup(resp.text, "lxml").find("select", attrs={"name": "acctto"})
-    return [o["value"] for o in picker.find_all("option") if o.get("value")] if picker else []
+    if not picker:
+        return []
+    return [(o["value"], o.get_text(strip=True)) for o in picker.find_all("option") if o.get("value")]
 
 
-def fetch_transactions(username, password, startdate, enddate, progress=lambda step, msg: None):
-    """Log in and return parsed transactions between startdate and enddate (ISO dates)
-    across every account the guest can see."""
-    transactions = []
+def fetch_activity(username, password, startdate, enddate, progress=lambda step, msg: None):
+    """Log in and return (purchases, swipes) between startdate and enddate (ISO dates)
+    across every account the guest can see. Meal-plan accounts ("Resident Meals")
+    have no itemized receipts; each -1 row there is a dining-hall swipe."""
+    purchases, swipes = [], []
     with requests.Session() as session:
         session.headers["User-Agent"] = USER_AGENT
         progress(2, "Logging in to Flex Bucks...")
@@ -133,17 +137,39 @@ def fetch_transactions(username, password, startdate, enddate, progress=lambda s
                 raise NoAccounts("guest login has no viewable accounts")
 
             progress(3, "Loading your transaction history...")
-            for acct in accounts:
+            for acct, name in accounts:
                 resp = session.get(build_statement_url(skey, startdate, enddate, acct), timeout=TIMEOUT)
                 resp.raise_for_status()
                 if _login_form(resp.text) is not None:
                     raise RuntimeError("Atrium sent the statement request back to the login page")
-                transactions += parse_transactions(resp.text)
+                if "meal" in name.lower():
+                    swipes += parse_swipes(resp.text)
+                else:
+                    purchases += parse_transactions(resp.text)
         finally:
             logout(session, skey)
 
     progress(4, "Parsing your food data...")
-    return transactions
+    return purchases, swipes
+
+
+def parse_swipes(html):
+    """Meal swipes from a meal-plan statement: [{date, location}] for each -1 row
+    (weekly "Automated Reset" and deposits are positive and skipped)."""
+    swipes = []
+    for date_cell in BeautifulSoup(html, "lxml").find_all("th", class_="jsa_month"):
+        row = date_cell.parent
+        desc = row.find("td", class_="jsa_desc")
+        amount = row.find("td", class_="jsa_amount")
+        if not desc or not amount:
+            continue
+        try:
+            value = float(amount.get_text(" ", strip=True).split()[0])
+        except (ValueError, IndexError):
+            continue
+        if value < 0:
+            swipes.append({"date": date_cell.get_text(" ", strip=True), "location": desc.get_text(" ", strip=True)})
+    return swipes
 
 
 def _safe_float(td):
