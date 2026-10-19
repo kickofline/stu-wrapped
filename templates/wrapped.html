@@ -135,6 +135,7 @@
 
     {% if times %}
     <!-- ── Favorite spots by meal ────────────────────────────── -->
+    {% if times.spots %}
     <section class="slide t-blue l1" data-slide="spots"><div class="frame">
       {{ blobs() }}
       <div class="body top">
@@ -153,6 +154,7 @@
       </div>
       {{ foot() }}
     </div></section>
+    {% endif %}
 
     <!-- ── Earliest / latest bite ────────────────────────────── -->
     <section class="slide t-orange l2" data-slide="earliest-latest"><div class="frame">

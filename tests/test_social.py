@@ -164,6 +164,14 @@ class SocialInsightsTests(unittest.TestCase):
         many = tiger_express([tiger(d) for d in range(1, 11)], meta)
         self.assertEqual(many["badges"][0]["title"], "Tiger Express VIP")
 
+    def test_tiger_express_is_not_a_favorite_spot(self):
+        from insights import time_insights
+        buys = [{"date": "Sep 1, 2026 12:00PM", "location": "CFA 1"},
+                {"date": "Sep 2, 2026 12:10PM", "location": "Tiger Exp 1"}]
+        times = time_insights(buys, "2026-07-01", "2026-10-19")
+        self.assertEqual({spot["location"] for group in times["spots"] for spot in group["top"]}, {"CFA"})
+        self.assertEqual(times["count"], 2)  # still a purchase, just not a spot
+
 
 if __name__ == "__main__":
     unittest.main()

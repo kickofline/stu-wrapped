@@ -19,7 +19,7 @@ load_dotenv()
 import analysis
 import analytics
 import og_image
-from insights import flex_paid, parse_when, spot_name, time_insights
+from insights import NOT_SPOTS, flex_paid, parse_when, spot_name, time_insights
 from social import (campus_activity, campus_percentiles, campus_wrapped, dining_badges,
                     dining_streaks, friend_match, signature_order, summary_highlights,
                     tiger_express)
@@ -468,6 +468,8 @@ def _summary(transactions: list, swipes: list, metadata: dict, label: str) -> di
     items = _aggregate_items(transactions)
     spots = defaultdict(lambda: {"visits": 0, "spend": 0.0, "items": set()})
     for tx in transactions:
+        if spot_name(tx["location"]) in NOT_SPOTS:
+            continue
         spot = spots[spot_name(tx["location"])]
         spot["visits"] += 1
         spot["spend"] += tx["grand_total"]

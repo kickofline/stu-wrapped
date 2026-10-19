@@ -83,3 +83,26 @@ NAME_MAP: dict[str, str] = {
 def expand_name(raw: str) -> str:
     """Return the full display name for a raw Atrium item name, or the original if unknown."""
     return NAME_MAP.get(raw.lower().strip(), raw)
+
+
+# One name per menu item. The cleanup model names each receipt on its own, so the same
+# item can come back as "Waffle Fry" on one receipt and "Waffle Fries" on another, which
+# splits its count. Keys are lowercase; SPOT_CANONICAL applies only at that spot.
+CANONICAL: dict[str, str] = {
+    "spicy sandwich": "Spicy Chicken Sandwich",
+    "waffle fry": "Waffle Fries",
+    "cbr quesadilla": "Chicken Bacon Ranch Quesadilla",
+    "cbr taco": "Chicken Bacon Ranch Taco",
+    "queso and chips": "Chips & Queso",
+    "chips and queso": "Chips & Queso",
+    "chips & queso": "Chips & Queso",
+    "fontn hot chocolt": "Hot Chocolate",
+}
+SPOT_CANONICAL: dict[tuple[str, str], str] = {
+    ("CFA", "cookie"): "Chocolate Chunk Cookie",
+}
+
+
+def canonical_name(name: str, spot: str | None = None) -> str:
+    key = name.lower().strip()
+    return SPOT_CANONICAL.get((spot, key)) or CANONICAL.get(key) or name.strip()

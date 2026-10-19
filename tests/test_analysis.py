@@ -46,6 +46,23 @@ class NormalizeTests(unittest.TestCase):
         analysis.normalize(cached)
         self.assertEqual(cached[0]["clean_items"][0]["item"], "Fountain Drink")
 
+    def test_meals_count_as_their_main_item_and_variants_share_one_name(self):
+        receipts = [
+            {"location": "CFA 1", "clean_items": [{"item": "Chick-fil-A Sandwich Meal", "detail": "Sub Mac & Cheese", "qty": 1, "total": 10.95}]},
+            {"location": "CFA 2", "clean_items": [{"item": "Spicy Sandwich", "detail": "", "qty": 1, "total": 5.65},
+                                                  {"item": "Waffle Fry", "detail": "Medium", "qty": 1, "total": 2.59},
+                                                  {"item": "Cookie", "detail": "", "qty": 1, "total": 1.79}]},
+            {"location": "Dr Jacks", "clean_items": [{"item": "Cookie", "detail": "", "qty": 1, "total": 2.00}]},
+        ]
+        analysis.canonicalize(receipts)
+        self.assertEqual(receipts[0]["clean_items"][0], {"item": "Chick-fil-A Sandwich", "detail": "Meal, Sub Mac & Cheese",
+                                                          "qty": 1, "total": 10.95})
+        self.assertEqual([i["item"] for i in receipts[1]["clean_items"]],
+                         ["Spicy Chicken Sandwich", "Waffle Fries", "Chocolate Chunk Cookie"])
+        self.assertEqual(receipts[2]["clean_items"][0]["item"], "Cookie")  # CFA's cookie only
+        analysis.canonicalize(receipts)  # applying it again changes nothing
+        self.assertEqual(receipts[0]["clean_items"][0]["detail"], "Meal, Sub Mac & Cheese")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,7 +18,8 @@ import threading
 
 import requests
 
-from name_map import expand_name
+from insights import spot_name
+from name_map import canonical_name, expand_name
 
 BASE_URL = os.environ.get("LITELLM_BASE_URL", "")
 API_KEY = os.environ.get("LITELLM_API_KEY", "")
@@ -117,8 +118,25 @@ def _display_name(name: str) -> str:
     return " ".join(word.capitalize() if len(word) > 3 else word for word in name.split())
 
 
-def _cleaned(items: list) -> list:
-    return [{**item, "item": _display_name(item["item"])} for item in items]
+def _canonical_items(items: list, spot: str) -> list:
+    """One name per menu item: raw-text safety net, known aliases, and a combo meal
+    counted as its main item ("Chick-fil-A Sandwich Meal" -> "Chick-fil-A Sandwich",
+    detail "Meal"), so a student's sandwich count includes the sandwiches in meals."""
+    out = []
+    for item in items:
+        name, detail = _display_name(item["item"]), (item.get("detail") or "").strip()
+        if name.lower().endswith(" meal"):
+            name = name[:-5].strip()
+            detail = f"Meal, {detail}" if detail else "Meal"
+        out.append({**item, "item": canonical_name(name, spot), "detail": detail})
+    return out
+
+
+def canonicalize(transactions: list) -> None:
+    """Apply _canonical_items to receipts cleaned earlier (saved results)."""
+    for tx in transactions:
+        if tx.get("clean_items"):
+            tx["clean_items"] = _canonical_items(tx["clean_items"], spot_name(tx["location"]))
 
 
 def _cache_key(signature: str) -> str:
@@ -154,7 +172,7 @@ def normalize(transactions: list) -> None:
         sig = _signature(tx)
         key = _cache_key(sig)
         if key in cache:
-            tx["clean_items"] = _cleaned(cache[key])
+            tx["clean_items"] = _canonical_items(cache[key], spot_name(tx["location"]))
         else:
             pending.setdefault(sig, []).append(tx)
 
@@ -171,8 +189,9 @@ def normalize(transactions: list) -> None:
             items = receipt.get("items") or []
             if not _valid(items, pending[sig][0]):
                 continue
-            clean = [{"item": _display_name(i["item"]), "detail": (i.get("detail") or "").strip(),
-                      "qty": int(i["qty"]), "total": round(float(i["total"]), 2)} for i in items]
+            clean = _canonical_items([{"item": i["item"], "detail": (i.get("detail") or "").strip(),
+                                       "qty": int(i["qty"]), "total": round(float(i["total"]), 2)} for i in items],
+                                     spot_name(pending[sig][0]["location"]))
             cache[_cache_key(sig)] = clean
             for tx in pending[sig]:
                 tx["clean_items"] = clean

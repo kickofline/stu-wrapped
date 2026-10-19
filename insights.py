@@ -21,6 +21,7 @@ LATE_NIGHT_CUTOFF = 4 * 60  # purchases before 4 AM count as the previous night'
 _REGISTER = re.compile(r"\s+(?:PAX\s+)?\d+$", re.IGNORECASE)
 # What students call each spot. Swipes happen at the Caf and its grab-and-go, Tiger Express.
 _SPOT_NAMES = {"Commons": "the Caf", "Tacos": "Tacos 4 Life", "Tiger Exp": "Tiger Express"}
+NOT_SPOTS = {"Tiger Express"}
 
 
 def spot_name(location: str) -> str:
@@ -91,10 +92,12 @@ def time_insights(events: list, startdate: str, enddate: str) -> dict | None:
     earliest = min(timed, key=lambda p: (late_key(p), p[0]))
     latest = max(timed, key=lambda p: (late_key(p), p[0]))
 
+    # Tiger Express is the Caf's grab-and-go counter, not a dining spot; it has its own slide.
     by_meal = {name: Counter() for name, _, _ in MEALS}
     for when, loc in timed:
-        by_meal[_meal(when.hour * 60 + when.minute)][loc] += 1
-    all_spots = Counter(loc for _, loc in timed)
+        if loc not in NOT_SPOTS:
+            by_meal[_meal(when.hour * 60 + when.minute)][loc] += 1
+    all_spots = Counter(loc for _, loc in timed if loc not in NOT_SPOTS)
 
     # Count weekdays from the first purchase, not the semester's nominal start
     # (Fall starts July 1, weeks before anyone is on campus).
