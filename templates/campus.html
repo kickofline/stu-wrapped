@@ -3,11 +3,7 @@
 {% block robots %}index, follow, max-image-preview:large{% endblock %}
 
 {% block meta %}
-{% if campus %}
-{% set desc = "What " ~ campus.students ~ " OBU students ate this semester: the most-ordered items, busiest spots and the Caf's busiest time." %}
-{% else %}
 {% set desc = "What OBU ate this semester, from everyone's Stu Wrapped: top orders, busiest spots and the Caf's busiest time." %}
-{% endif %}
 {% set og_image = url_for('og_site', _external=True, _scheme='https') %}
 <meta name="theme-color" content="#2d46b9">
 <meta name="description" content="{{ desc }}">
@@ -36,10 +32,10 @@
     <p class="eyebrow">{{ semester_label }}</p>
     <h1 class="display">CAMPUS<br>LEADERBOARD</h1>
     {% if campus %}
-    <p class="compare-lead">What OBU ate this semester, from {{ campus.students }} students' Stu Wrapped.</p>
+    <p class="compare-lead">What OBU ate this semester, from everyone's Stu Wrapped.</p>
 
     <div class="campus-stats">
-      <div class="card"><p class="card-label">Flex spent</p><strong>{{ money(campus.spend) }}</strong><p>{{ money(campus.avg_spend) }} per student</p></div>
+      <div class="card"><p class="card-label">Flex spent</p><strong>{{ money(campus.spend) }}</strong><p>across campus</p></div>
       <div class="card"><p class="card-label">Food visits</p><strong>{{ "{:,}".format(campus.visits) }}</strong><p>paid with Flex Bucks</p></div>
       <div class="card"><p class="card-label">Caf swipes</p><strong>{{ "{:,}".format(campus.caf_swipes) }}</strong><p>meal swipes</p></div>
       {% if campus.record_streak %}<div class="card"><p class="card-label">Longest Caf streak</p><strong>{{ campus.record_streak }}</strong><p>days in a row</p></div>{% endif %}
@@ -68,7 +64,7 @@
     </section>
     {% endif %}
     {% else %}
-    <p class="compare-lead">The Campus Leaderboard unlocks once 3 students have wrapped their semester. {% if wrapped_count %}{{ wrapped_count }} so far. Be next.{% else %}Be the first.{% endif %}</p>
+    <p class="compare-lead">The Campus Leaderboard unlocks once enough students have wrapped their semester. Get yours to help fill it in.</p>
     {% endif %}
 
     <div class="compare-actions"><a class="btn-primary" href="{{ url_for('index') }}">Get your own Wrapped →</a></div>

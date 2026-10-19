@@ -270,7 +270,7 @@ def campus_percentiles(current: dict, students: list[dict], minimum: int = 3) ->
                 candidates.append({
                     **rank,
                     "label": f"{top_item} fans",
-                    "detail": f"{quantity} orders · {len(peers)} students ordered it",
+                    "detail": f"{quantity} orders",
                     "priority": 1,
                 })
 
@@ -408,7 +408,7 @@ def campus_wrapped(students: list[dict], minimum: int = 3) -> dict | None:
 
     def ranked(totals: Counter, people: Counter, limit: int) -> list[dict]:
         names = sorted((n for n in totals if people[n] >= minimum), key=lambda n: (-totals[n], n.casefold()))
-        return [{"name": n, "count": totals[n], "students": people[n]} for n in names[:limit]]
+        return [{"name": n, "count": totals[n]} for n in names[:limit]]
 
     busiest = None
     if timed >= minimum and sum(weekdays):
@@ -419,9 +419,7 @@ def campus_wrapped(students: list[dict], minimum: int = 3) -> dict | None:
     spend = round(sum(s.get("total_spend") or 0 for s in students), 2)
     record = max((s.get("caf_streak") or 0 for s in students), default=0)
     return {
-        "students": len(students),
         "spend": spend,
-        "avg_spend": round(spend / len(students), 2),
         "visits": sum(s.get("visits") or 0 for s in students),
         "caf_swipes": sum(s.get("caf_swipes") or 0 for s in students),
         "top_items": ranked(item_orders, item_students, 5),

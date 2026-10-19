@@ -141,7 +141,6 @@ class SocialInsightsTests(unittest.TestCase):
         self.assertIsNone(campus_wrapped(students))
         students.append(student({"Taco": 1}, {"Tacos 4 Life": 1}))
         campus = campus_wrapped(students)
-        self.assertEqual(campus["students"], 3)
         self.assertEqual([i["name"] for i in campus["top_items"]], ["Taco"])  # Rare Item: only 2 students
         self.assertEqual(campus["top_items"][0]["count"], 5)
         self.assertEqual(campus["busiest"]["day"], "Monday")

@@ -501,7 +501,7 @@ def switch_account():
 def campus_page():
     students = list(_load_stats()["students"].values())
     return render_template(
-        "campus.html", campus=campus_wrapped(students), wrapped_count=len(students),
+        "campus.html", campus=campus_wrapped(students),
         semester_label=_semester_dates()[2],
         canonical=url_for("campus_page", _external=True, _scheme="https"),
     )
@@ -655,7 +655,6 @@ def _wrapped_context(share_id: str) -> dict:
         "flex": _flex_plan(transactions, meta),
         "ai": result.get("analysis"),
         "campus": campus,
-        "campus_count": len(students),
         "usual": usual,
         "badges": badges,
         "streaks": dining_streaks(transactions, result.get("swipes", []), meta),
