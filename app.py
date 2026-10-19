@@ -23,8 +23,9 @@ from social import (campus_activity, campus_percentiles, campus_wrapped, dining_
                     dining_streaks, friend_match, signature_order, summary_highlights)
 from jobs import (claim, claim_waiting, cleanup_old_jobs, fail, finish, get_job,
                   job_for, update_progress)
-from mailbox import (delete_credentials, inbox_address, is_tag, load_credentials,
-                     new_tag, parse_invite, save_credentials, tag_from_recipient)
+from mailbox import (delete_credentials, inbox_address, is_atrium_invite, is_tag,
+                     load_credentials, new_tag, parse_invite, save_credentials,
+                     tag_from_recipient)
 from name_map import expand_name
 from scraper import LoginFailed, LoginLimited, NoAccounts, fetch_activity
 
@@ -183,6 +184,14 @@ def _first_name(meta: dict) -> str:
 def _set_cookie(resp: Response, name: str, value: str, max_age: int = 365 * 24 * 3600) -> None:
     resp.set_cookie(name, value, max_age=max_age, httponly=True, samesite="Lax",
                     secure=request.is_secure or request.headers.get("X-Forwarded-Proto") == "https")
+
+
+def _new_inbox_tag() -> str:
+    """A fresh inbox tag that no saved login already uses."""
+    while True:
+        tag = new_tag()
+        if load_credentials(tag) is None:
+            return tag
 
 
 def _record_raw_items(transactions: list) -> None:
@@ -438,7 +447,7 @@ def _summary(transactions: list, swipes: list, metadata: dict, label: str) -> di
 def index():
     tag = request.cookies.get(INBOX_COOKIE)
     if not is_tag(tag):
-        tag = new_tag()
+        tag = _new_inbox_tag()
     vs_id = request.args.get("vs")
     vs = _result_meta(vs_id)
     invite = load_credentials(tag)
@@ -466,7 +475,7 @@ def switch_account():
     if is_tag(tag):
         delete_credentials(tag)
     resp = redirect(url_for("index"))
-    _set_cookie(resp, INBOX_COOKIE, new_tag())
+    _set_cookie(resp, INBOX_COOKIE, _new_inbox_tag())
     resp.delete_cookie(MINE_COOKIE)
     return resp
 
@@ -541,16 +550,21 @@ def api_inbound():
         _log(f"[inbound] ignoring mail for unknown recipient {recipient!r}")
         return jsonify({"error": "unknown recipient"}), 422
 
-    invite = parse_invite(request.get_data(), tag)
+    raw = request.get_data()
+    if not is_atrium_invite(raw):
+        _log(f"[inbound] dropped mail for inbox {tag[:2]}... that is not an Atrium invite")
+        return jsonify({"error": "not an Atrium invite"}), 422
+
+    invite = parse_invite(raw, tag)
     if not invite:
-        _log(f"[inbound] no password in {len(request.get_data())}-byte email for inbox {tag[:4]}...")
+        _log(f"[inbound] no password in {len(raw)}-byte email for inbox {tag[:2]}...")
         return jsonify({"error": "no credentials found"}), 422
 
     save_credentials(tag, invite)
     woken = claim_waiting(tag)
     for job_id in woken:
         _start_job(job_id, tag, invite)
-    _log(f"[inbound] stored invite for inbox {tag[:4]}..., started {len(woken)} waiting run(s)")
+    _log(f"[inbound] stored invite for inbox {tag[:2]}..., started {len(woken)} waiting run(s)")
     return jsonify({"ok": True})
 
 
@@ -624,6 +638,7 @@ def _wrapped_context(share_id: str) -> dict:
         "flex": _flex_plan(transactions, meta),
         "ai": result.get("analysis"),
         "campus": campus,
+        "campus_count": len(students),
         "usual": usual,
         "badges": badges,
         "streaks": dining_streaks(transactions, result.get("swipes", []), meta),

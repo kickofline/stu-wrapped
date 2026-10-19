@@ -5,19 +5,47 @@ import unittest
 
 import app
 import jobs
+import mailbox
 
 
 class AppTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.original_results = app.RESULTS_DIR
+        self.original = (app.RESULTS_DIR, mailbox.CREDENTIALS_DIR, app.new_tag)
         app.RESULTS_DIR = self.tmp.name
+        mailbox.CREDENTIALS_DIR = os.path.join(self.tmp.name, "credentials")
         app.app.config["TESTING"] = True
         jobs.JOBS.clear()
 
     def tearDown(self):
-        app.RESULTS_DIR = self.original_results
+        app.RESULTS_DIR, mailbox.CREDENTIALS_DIR, app.new_tag = self.original
         self.tmp.cleanup()
+
+    def _inbound(self, sender: str, extra_headers: str = ""):
+        raw = (f"From: Atrium <{sender}>\r\nTo: abc123@stu.exposed\r\n{extra_headers}"
+               "Subject: Guest Access\r\nContent-Type: text/plain\r\n\r\n"
+               "Name: Pat Doe\nPassword: hunter2\n").encode()
+        os.environ["CREDENTIAL_SECRET"] = "test-secret"
+        return app.app.test_client().post("/api/inbound", data=raw, headers={
+            "X-Credential-Secret": "test-secret", "X-Envelope-To": "abc123@stu.exposed",
+            "Content-Type": "message/rfc822"})
+
+    def test_only_atrium_invites_set_a_saved_login(self):
+        self.assertEqual(self._inbound("someone@example.com").status_code, 422)
+        spoofed = "Authentication-Results: mx.cloudflare.net; dmarc=fail header.from=atriumcampus.com\r\n"
+        self.assertEqual(self._inbound("noreply@atriumcampus.com", spoofed).status_code, 422)
+        self.assertIsNone(mailbox.load_credentials("abc123"))
+        self.assertEqual(self._inbound("NoReply@AtriumCampus.com").status_code, 200)
+        self.assertEqual(mailbox.load_credentials("abc123")["password"], "hunter2")
+
+    def test_new_inboxes_are_six_characters_and_skip_saved_logins(self):
+        self.assertRegex(mailbox.new_tag(), r"^[a-z0-9]{6}$")
+        mailbox.save_credentials("taken1", {"username": "u", "password": "p", "name": None})
+        issued = iter(["taken1", "fresh1"])
+        app.new_tag = lambda: next(issued)
+        client = app.app.test_client()
+        client.get("/")
+        self.assertEqual(client.get_cookie(app.INBOX_COOKIE).value, "fresh1")
 
     def test_raw_receipts_are_only_served_to_the_owner(self):
         share_id = "abcdefghijkl"

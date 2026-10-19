@@ -4,8 +4,8 @@ Each browser gets a random tag (kept in a cookie). The student invites
 <tag>@stu.exposed as a Flex Bucks guest; the Cloudflare Email Worker forwards
 the raw invite to /api/inbound, which parses it here and stores the guest login
 under that tag so the same browser can re-run later without inviting again.
-The tag is the key to that saved login, so it must not be guessable: 16 hex
-characters (64 bits). Students copy the address with a button, never type it.
+Tags are 6 characters from a-z and 0-9 (2.2 billion of them): short enough to
+type, and a new tag is never one that already has a saved login.
 """
 import json
 import os
@@ -13,26 +13,29 @@ import re
 import secrets
 from datetime import datetime
 from email import message_from_bytes, policy
+from email.utils import parseaddr
 
 from bs4 import BeautifulSoup
 
 DOMAIN = "stu.exposed"
 CREDENTIALS_DIR = os.path.join(os.path.dirname(__file__), "data", "credentials")
 
-# 16 hex for new tags; 6 still accepts browsers that got the short tags before 2026-10-19.
-_TAG_RE = re.compile(r"^(?:[0-9a-f]{6}|[0-9a-f]{16})$")
-_RECIPIENT_RE = re.compile(r"(?:^|[<\s])([0-9a-f]{16}|[0-9a-f]{6})@", re.IGNORECASE)
+TAG_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789"
+_TAG_RE = re.compile(r"^[a-z0-9]{6}$")
+_RECIPIENT_RE = re.compile(r"(?:^|[<\s])([a-z0-9]{6})@", re.IGNORECASE)
+# Atrium's guest invites come from this address only; its DMARC policy is quarantine.
+INVITE_SENDER = "noreply@atriumcampus.com"
 _USERNAME_RE = re.compile(r"(?:username|login)\s*:\s*(\S+)", re.IGNORECASE)
 _PASSWORD_RE = re.compile(r"password\s*:\s*(\S+)", re.IGNORECASE)
 _NAME_RE = re.compile(r"\bname\s*:\s*([A-Za-z][A-Za-z .'-]*?)\s*(?:https?://|\n|$)", re.IGNORECASE)
 
 
 def new_tag() -> str:
-    return secrets.token_hex(8)
+    return "".join(secrets.choice(TAG_ALPHABET) for _ in range(6))
 
 
 def is_tag(value: str | None) -> bool:
-    return bool(value) and bool(_TAG_RE.match(value))
+    return bool(value) and bool(_TAG_RE.fullmatch(value))
 
 
 def inbox_address(tag: str) -> str:
@@ -42,6 +45,14 @@ def inbox_address(tag: str) -> str:
 def tag_from_recipient(recipient: str) -> str | None:
     m = _RECIPIENT_RE.search(recipient or "")
     return m.group(1).lower() if m else None
+
+
+def is_atrium_invite(raw: bytes) -> bool:
+    """Anyone can mail <tag>@stu.exposed; only Atrium's own invite may set a saved login."""
+    msg = message_from_bytes(raw, policy=policy.default)
+    sender = parseaddr(str(msg.get("From", "")))[1].lower()
+    auth = " ".join(str(h) for h in msg.get_all("Authentication-Results") or []).lower()
+    return sender == INVITE_SENDER and "dmarc=fail" not in auth
 
 
 def _body_text(raw: bytes) -> str:

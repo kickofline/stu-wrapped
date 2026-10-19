@@ -159,7 +159,7 @@ You get their stats as JSON. Write in second person, specific to their numbers a
 short, and clean (PG, no profanity, nothing about body or weight). Every claim must follow from
 the numbers given: never invent comparisons, counts, or items, and check any "more than" against the data.
 Answer with JSON only:
-{"personality": {"title": "a 2-4 word dining persona", "description": "2-3 sentences"},
+{"personality": {"title": "a 2-4 word dining persona, at most 28 characters", "description": "2-3 sentences"},
  "roast": "2-3 sentences of playful teasing about their habits",
  "money": ["3 short plain-language observations about their spending, the last one a gentle suggestion"]}"""
 
