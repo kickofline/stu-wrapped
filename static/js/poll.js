@@ -37,7 +37,7 @@ function poll() {
         clearInterval(intervalId);
         if (spinner)  spinner.style.display  = 'none';
         if (errorBox) errorBox.style.display = '';
-        if (errorMsg) errorMsg.textContent   = data.error || data.message || 'Unknown error';
+        if (errorMsg) errorMsg.textContent   = data.error || data.message || 'Tap Start over to try again.';
       }
     })
     .catch(() => {

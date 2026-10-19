@@ -11,7 +11,7 @@ import threading
 from datetime import datetime, timedelta
 
 TOTAL_STEPS = 6
-WAITING_MESSAGE = "Waiting for your Flex Bucks invite email..."
+WAITING_MESSAGE = "Waiting for your Flex Bucks invite…"
 
 JOBS: dict[str, dict] = {}
 _lock = threading.Lock()

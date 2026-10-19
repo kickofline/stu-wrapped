@@ -27,10 +27,10 @@
     <a class="back-link" href="{{ url_for('wrapped', share_id=mine.share_id) }}">← Back to {{ mine.first_name }}'s Wrapped</a>
     <p class="eyebrow">OBU STU WRAPPED · HEAD TO HEAD</p>
     <h1 class="display">COMPARE<br>YOUR<br>ORDERS</h1>
-    <p class="compare-lead">Paste another Stu Wrapped link. We compare only the totals and favorites already visible in each Wrapped—not raw receipts.</p>
+    <p class="compare-lead">Paste a friend's Stu Wrapped link. We compare your totals, favorites and Caf visit times, never your receipts.</p>
 
     <form class="compare-form card" method="post">
-      <label for="friend">Friend's Wrapped link or share code</label>
+      <label for="friend">Your friend's Wrapped link</label>
       <input id="friend" name="friend" required autocomplete="off" placeholder="https://stu.exposed/wrapped/…">
       <button class="btn-primary" type="submit">See the matchup</button>
     </form>

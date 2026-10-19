@@ -131,14 +131,14 @@ def fetch_activity(username, password, startdate, enddate, progress=lambda step,
     purchases, swipes, balances, pages = [], [], {}, []
     with requests.Session() as session:
         session.headers["User-Agent"] = USER_AGENT
-        progress(2, "Logging in to Flex Bucks...")
+        progress(2, "Logging in to Flex Bucks…")
         skey = login(session, username, password)
         try:
             accounts = list_accounts(session, skey)
             if not accounts:
                 raise NoAccounts("guest login has no viewable accounts")
 
-            progress(3, "Loading your transaction history...")
+            progress(3, "Loading your purchase history…")
             for acct, name in accounts:
                 resp = session.get(build_statement_url(skey, startdate, enddate, acct), timeout=TIMEOUT)
                 resp.raise_for_status()
@@ -155,7 +155,7 @@ def fetch_activity(username, password, startdate, enddate, progress=lambda step,
         finally:
             logout(session, skey)
 
-    progress(4, "Parsing your food data...")
+    progress(4, "Reading your receipts…")
     return purchases, swipes, balances, pages
 
 

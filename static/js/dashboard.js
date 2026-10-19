@@ -9,7 +9,7 @@ new Chart(ctx, {
   data: {
     labels: top15.map(i => i.name.length > 24 ? i.name.slice(0, 24) + '…' : i.name),
     datasets: [{
-      label: 'Times Ordered',
+      label: 'Times ordered',
       data: top15.map(i => i.qty),
       backgroundColor: '#f4ff5c',
       borderRadius: 6,

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Your OBU Stu Wrapped — Dashboard{% endblock %}
+{% block title %}{% if first_name %}{{ first_name }}'s items{% else %}All items{% endif %} · OBU Stu Wrapped{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 {% endblock %}
@@ -9,11 +9,11 @@
 
   <header class="dash-header">
     <div>
-      <h1 class="dash-title">Your OBU Stu Wrapped</h1>
-      <p class="dash-subtitle">{{ metadata.startdate }} → {{ metadata.enddate }}</p>
+      <h1 class="dash-title">{% if first_name %}{{ first_name }}'s items{% else %}Every item{% endif %}</h1>
+      <p class="dash-subtitle">{{ period }}</p>
     </div>
     <div class="dash-actions">
-      <a href="{{ url_for('wrapped', share_id=share_id) }}" class="btn-primary">View Slideshow →</a>
+      <a href="{{ url_for('wrapped', share_id=share_id) }}" class="btn-primary">See the Wrapped →</a>
       <a href="{{ url_for('download_csv', share_id=share_id) }}" class="btn-secondary">Download CSV</a>
     </div>
   </header>
@@ -22,25 +22,25 @@
   <div class="stat-row">
     <div class="stat-card">
       <span class="stat-card__num">{{ total_qty }}</span>
-      <span class="stat-card__label">Total Items Ordered</span>
+      <span class="stat-card__label">Items ordered</span>
     </div>
     <div class="stat-card">
       <span class="stat-card__num">${{ "%.2f"|format(total_spend) }}</span>
-      <span class="stat-card__label">Total Spent</span>
+      <span class="stat-card__label">Spent on Flex</span>
     </div>
     <div class="stat-card">
       <span class="stat-card__num">{{ unique_items }}</span>
-      <span class="stat-card__label">Unique Menu Items</span>
+      <span class="stat-card__label">Different items</span>
     </div>
     <div class="stat-card">
       <span class="stat-card__num stat-card__num--sm">{{ items[0].name if items else '—' }}</span>
-      <span class="stat-card__label">#1 Most Ordered</span>
+      <span class="stat-card__label">Most ordered</span>
     </div>
   </div>
 
   <!-- Chart -->
   <section class="chart-section card">
-    <h2 class="section-title">Top 15 Items</h2>
+    <h2 class="section-title">Top 15 items</h2>
     <div class="chart-wrap">
       <canvas id="topItemsChart"></canvas>
     </div>
@@ -49,7 +49,7 @@
   <!-- Sortable table -->
   <section class="table-section card">
     <div class="table-header-row">
-      <h2 class="section-title">All Items</h2>
+      <h2 class="section-title">All items</h2>
       <input type="text" id="table-search" class="search-input"
              placeholder="Filter items…" autocomplete="off">
     </div>
@@ -59,8 +59,8 @@
           <tr>
             <th data-col="rank" class="sortable">Rank <span class="sort-icon">↕</span></th>
             <th data-col="name" class="sortable">Item <span class="sort-icon">↕</span></th>
-            <th data-col="qty" class="sortable">Times Ordered <span class="sort-icon">↕</span></th>
-            <th data-col="total_spend" class="sortable">Total Spent <span class="sort-icon">↕</span></th>
+            <th data-col="qty" class="sortable">Times ordered <span class="sort-icon">↕</span></th>
+            <th data-col="total_spend" class="sortable">Spent <span class="sort-icon">↕</span></th>
           </tr>
         </thead>
         <tbody>

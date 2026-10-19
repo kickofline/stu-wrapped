@@ -286,17 +286,17 @@ def _run_job(job_id: str, tag: str, invite: dict) -> None:
         )
     except LoginFailed:
         delete_credentials(tag)
-        fail(job_id, "Flex Bucks didn't accept the login from your invite email. "
-                     "Remove our address from your Flex Bucks guests, add it again, then hit Generate.")
+        fail(job_id, "Flex Bucks didn't accept the login from your invite. "
+                     "Remove our address from your Flex Bucks guests, add it again, then tap Start over.")
         return
     except LoginLimited:
-        fail(job_id, "Flex Bucks is limiting logins for your guest right now. "
-                     "Wait about 15 minutes and hit Generate again; your invite is saved.")
+        fail(job_id, "Flex Bucks is limiting logins right now. "
+                     "Your invite is saved, so wait about 15 minutes and tap Start over.")
         return
     except NoAccounts:
-        fail(job_id, "We could log in, but Flex Bucks isn't showing your guest any accounts. "
-                     "Check that you're on a meal plan, then in Grant Guest Access make sure the guest "
-                     "is allowed to view your account activity, and hit Generate again.")
+        fail(job_id, "We logged in, but Flex Bucks isn't sharing any accounts with your guest. "
+                     "Check that you're on a meal plan and that, in Grant Guest Access, the guest "
+                     "can view your account activity. Then tap Start over.")
         return
     except Exception:
         _log(f"[job {job_id}] scrape failed:\n{traceback.format_exc()}")
@@ -321,14 +321,14 @@ def _run_job(job_id: str, tag: str, invite: dict) -> None:
     }
     ai = None
     if analysis.enabled():
-        update_progress(job_id, 5, "Personalizing your Wrapped...")
+        update_progress(job_id, 5, "Personalizing your Wrapped…")
         try:
             analysis.normalize(transactions)
             ai = analysis.analyze(_summary(transactions, swipes, metadata, label))
         except Exception:
             _log(f"[job {job_id}] DeepSeek pass failed, continuing without it:\n{traceback.format_exc()}")
 
-    update_progress(job_id, 6, "Wrapping it up...")
+    update_progress(job_id, 6, "Wrapping it up…")
     share_id = _save_result(transactions, swipes, metadata, ai)
     _record_run(transactions, swipes, student, date.fromisoformat(startdate).year)
     finish(job_id, share_id)
@@ -450,7 +450,7 @@ def start():
 def wait(job_id):
     job = get_job(job_id)
     if not job:
-        flash("That run expired. Hit Generate again.", "error")
+        flash("That run expired. Start again below.", "error")
         return redirect(url_for("index"))
     return render_template("waiting.html", job=job, inbox_address=inbox_address(job["tag"]))
 
@@ -459,7 +459,7 @@ def wait(job_id):
 def status(job_id):
     job = get_job(job_id)
     if not job:
-        return jsonify({"status": "error", "message": "That run expired. Hit Generate again."}), 404
+        return jsonify({"status": "error", "message": "That run expired. Tap Start over."}), 404
 
     resp = jsonify({
         "status": job["status"],
@@ -504,12 +504,16 @@ def api_inbound():
 @app.get("/results/<share_id>")
 def results(share_id):
     result = _load_result(share_id)
+    meta = result["metadata"]
     items = _aggregate_items(result["transactions"])
+    start, end = date.fromisoformat(meta["startdate"]), date.fromisoformat(meta["enddate"])
     return render_template(
         "dashboard.html",
         items=items,
         items_json=json.dumps(items),
-        metadata=result["metadata"],
+        first_name=_first_name(meta) if meta.get("name") else "",
+        period=f"{'Spring' if start.month <= 6 else 'Fall'} {start.year} · "
+               f"{start:%b} {start.day} – {end:%b} {end.day}",
         total_qty=sum(i["qty"] for i in items),
         total_spend=round(sum(i["total_spend"] for i in items), 2),
         unique_items=len(items),
@@ -657,9 +661,9 @@ def compare_start(share_id):
     if request.method == "POST":
         other_id = _share_id_from_input(request.form.get("friend", ""))
         if not other_id or not os.path.isfile(os.path.join(RESULTS_DIR, f"{other_id}.json")):
-            flash("Paste a valid Stu Wrapped link or 12-character share code.", "error")
+            flash("That doesn't look like a Stu Wrapped link. Paste the full link your friend sent.", "error")
         elif other_id == share_id:
-            flash("That is the same Wrapped. Ask a friend for theirs!", "error")
+            flash("That's the same Wrapped. Ask a friend for theirs!", "error")
         else:
             return redirect(url_for("compare_results", left_id=share_id, right_id=other_id))
     invite_url = url_for("compare_start", share_id=share_id, _external=True, _scheme="https")
