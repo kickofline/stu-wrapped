@@ -204,7 +204,9 @@ body:has(.compare-page):has(.flash) .compare-shell { padding-top: 6.5rem; }
 .campus-page .blob.b1 { background: #4762d6; }
 .campus-page .blob.b2 { background: #22389a; }
 .campus-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; margin: 1.6rem 0 1rem; }
-.campus-stats strong { display: block; font-family: var(--display); font-size: clamp(2rem, 6vw, 2.8rem); line-height: 1; color: var(--lime); margin: .5rem 0 .3rem; }
+.campus-stats .card { container-type: inline-size; }
+/* Long numbers (a four-figure Flex total) shrink to fit their card instead of spilling into the next. */
+.campus-stats strong { display: block; font-family: var(--display); font-size: min(2.8rem, calc(100cqi / (var(--chars) * .7))); line-height: 1; color: var(--lime); margin: .5rem 0 .3rem; white-space: nowrap; }
 .campus-stats p:last-child { font-weight: 700; color: rgba(255,255,255,.72); }
 .ranked-card, .busiest-card { margin-top: 1rem; }
 .ranked-card li small { margin-left: auto; font: 700 .95rem var(--font); opacity: .72; white-space: nowrap; }

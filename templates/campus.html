@@ -34,11 +34,12 @@
     {% if campus %}
     <p class="compare-lead">What OBU ate this semester, from everyone's Stu Wrapped.</p>
 
+    {% macro stat(label, value, note) %}<div class="card"><p class="card-label">{{ label }}</p><strong style="--chars: {{ value | length }}">{{ value }}</strong><p>{{ note }}</p></div>{% endmacro %}
     <div class="campus-stats">
-      <div class="card"><p class="card-label">Flex spent</p><strong>{{ money(campus.spend) }}</strong><p>across campus</p></div>
-      <div class="card"><p class="card-label">Food visits</p><strong>{{ "{:,}".format(campus.visits) }}</strong><p>paid with Flex Bucks</p></div>
-      <div class="card"><p class="card-label">Caf swipes</p><strong>{{ "{:,}".format(campus.caf_swipes) }}</strong><p>meal swipes</p></div>
-      {% if campus.record_streak %}<div class="card"><p class="card-label">Longest Caf streak</p><strong>{{ campus.record_streak }}</strong><p>days in a row</p></div>{% endif %}
+      {{ stat("Flex spent", "${:,.0f}".format(campus.spend), "across campus") }}
+      {{ stat("Food visits", "{:,}".format(campus.visits), "paid with Flex Bucks") }}
+      {{ stat("Caf swipes", "{:,}".format(campus.caf_swipes), "meal swipes") }}
+      {% if campus.record_streak %}{{ stat("Longest Caf streak", campus.record_streak | string, "days in a row") }}{% endif %}
     </div>
 
     {% if campus.top_items %}
