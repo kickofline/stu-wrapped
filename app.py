@@ -43,6 +43,15 @@ INBOX_COOKIE = "inbox"
 _SHARE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{12}$")
 _stats_lock = threading.Lock()
 
+SITE_NAME = "OBU Stu Wrapped"
+SITE_DESCRIPTION = ("Your Ouachita Baptist University dining semester, wrapped: top CFA orders, "
+                    "Dr. Jack's lattes, Caf swipes and Flex Bucks spending. Free for OBU students.")
+
+
+@app.context_processor
+def _site_meta():
+    return {"site_name": SITE_NAME, "site_description": SITE_DESCRIPTION}
+
 
 def _log(*args):
     print(*args, flush=True)
@@ -554,7 +563,8 @@ def compare_start(share_id):
         else:
             return redirect(url_for("compare_results", left_id=share_id, right_id=other_id))
     invite_url = url_for("compare_start", share_id=share_id, _external=True, _scheme="https")
-    return render_template("compare_start.html", mine=mine, invite_url=invite_url)
+    og = url_for("og_result", share_id=share_id, _external=True, _scheme="https")
+    return render_template("compare_start.html", mine=mine, invite_url=invite_url, og_image=og)
 
 
 @app.get("/compare/<left_id>/<right_id>")
@@ -606,6 +616,27 @@ def og_site():
         os.makedirs(OG_DIR, exist_ok=True)
         og_image.render(path, label, "Your semester of CFA runs, Dr. Jack's lattes and Caf swipes")
     return send_file(path, mimetype="image/png", max_age=86400)
+
+
+@app.get("/robots.txt")
+def robots_txt():
+    # Twitterbot honours robots.txt, so /wrapped and /og stay crawlable for link
+    # previews; personal pages stay out of search through their noindex meta tag.
+    sitemap = url_for("sitemap_xml", _external=True, _scheme="https")
+    return Response(f"User-agent: *\nDisallow: /api/\nDisallow: /status/\n\nSitemap: {sitemap}\n",
+                    mimetype="text/plain")
+
+
+@app.get("/sitemap.xml")
+def sitemap_xml():
+    home = url_for("index", _external=True, _scheme="https")
+    return Response(
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"  <url><loc>{home}</loc><changefreq>weekly</changefreq></url>\n"
+        "</urlset>\n",
+        mimetype="application/xml",
+    )
 
 
 @app.get("/api/results/<share_id>")

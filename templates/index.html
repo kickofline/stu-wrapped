@@ -1,13 +1,29 @@
 {% extends "base.html" %}
 
-{% block title %}OBU Stu Wrapped — your semester in food{% endblock %}
+{% block title %}OBU Stu Wrapped — your Ouachita semester in food{% endblock %}
+{% block robots %}index, follow, max-image-preview:large{% endblock %}
+
+{% block meta %}
+{{ super() }}
+{% set home = url_for('index', _external=True, _scheme='https') %}
+<link rel="canonical" href="{{ home }}">
+<meta property="og:url" content="{{ home }}">
+<script type="application/ld+json">
+{{ {"@context": "https://schema.org", "@graph": [
+  {"@type": "WebSite", "name": site_name, "alternateName": "Stu Wrapped", "url": home},
+  {"@type": "WebApplication", "name": site_name, "url": home, "description": site_description,
+   "applicationCategory": "LifestyleApplication", "operatingSystem": "Any", "isAccessibleForFree": true,
+   "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}
+]} | tojson }}
+</script>
+{% endblock %}
 
 {% block content %}
 <main class="landing">
   <i class="blob b1"></i><i class="blob b2"></i>
   <div class="landing-inner">
     <p class="eyebrow">{{ semester_label }} is here</p>
-    <h1 class="display">OBU<br>STU<br>WRAPPED</h1>
+    <h1 class="display">OBU <br class="tall-only">STU<br>WRAPPED</h1>
     <p class="lede">Your semester of CFA runs, Dr. Jack's lattes and Caf swipes, wrapped up.</p>
 
     <form method="POST" action="{{ url_for('start') }}">
@@ -21,7 +37,6 @@
         </li>
         <li>
           <p class="eyebrow">2 · Add it as a Flex Bucks guest</p>
-          <p class="note">View-only: we can't spend your Flex. Needs a meal plan.</p>
           <a class="pill pill-light" href="https://connectobu.atriumcampus.com/guestaccess.php" target="_blank" rel="noopener">Open Flex Bucks ↗</a>
         </li>
         <li>
@@ -30,6 +45,7 @@
         </li>
       </ol>
     </form>
+    <p class="fine-print">Not affiliated with OBU or Sodexo.</p>
   </div>
 </main>
 {% endblock %}

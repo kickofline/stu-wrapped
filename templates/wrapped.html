@@ -2,17 +2,21 @@
 {% block title %}{% if first_name %}{{ first_name }}'s{% else %}Your{% endif %} OBU Stu Wrapped · {{ semester_label }}{% endblock %}
 
 {% block meta %}
-{% set og_title = (first_name ~ "'s OBU Stu Wrapped") if first_name else "OBU Stu Wrapped" %}
-{% set og_desc = (ai.personality.title ~ " · ") if ai else "" %}
+{% set og_title = ((first_name ~ "'s OBU Stu Wrapped") if first_name else "OBU Stu Wrapped") ~ " · " ~ semester_label %}
+{% set og_desc = ((ai.personality.title ~ " · ") if ai else "") ~ "See their semester in food, then get yours." %}
 <meta name="theme-color" content="#1e3264">
+<meta name="description" content="{{ og_desc }}">
 <meta property="og:type" content="website">
-<meta property="og:title" content="{{ og_title }} · {{ semester_label }}">
-<meta property="og:description" content="{{ og_desc }}See their semester in food, then get yours.">
+<meta property="og:title" content="{{ og_title }}">
+<meta property="og:description" content="{{ og_desc }}">
 <meta property="og:url" content="{{ share_url }}">
 <meta property="og:image" content="{{ og_image }}">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{{ og_title }}">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ og_title }}">
+<meta name="twitter:description" content="{{ og_desc }}">
 <meta name="twitter:image" content="{{ og_image }}">
 {% endblock %}
 

@@ -1,6 +1,25 @@
 {% extends "base.html" %}
 {% block title %}Compare with {{ mine.first_name }} · OBU Stu Wrapped{% endblock %}
 
+{% block meta %}
+{% set og_title = "Compare your OBU Stu Wrapped with " ~ (mine.first_name or "a friend") %}
+{% set og_desc = "See your menu match, shared favorites and who ate at the Caf together." %}
+<meta name="theme-color" content="#6c2bd9">
+<meta name="description" content="{{ og_desc }}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{ og_title }}">
+<meta property="og:description" content="{{ og_desc }}">
+<meta property="og:url" content="{{ invite_url }}">
+<meta property="og:image" content="{{ og_image }}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{{ og_title }}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ og_title }}">
+<meta name="twitter:description" content="{{ og_desc }}">
+<meta name="twitter:image" content="{{ og_image }}">
+{% endblock %}
+
 {% block content %}
 <main class="compare-page compare-start">
   <i class="blob b1"></i><i class="blob b2"></i>

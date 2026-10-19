@@ -2,13 +2,23 @@
 {% block title %}{{ left.first_name }} + {{ right.first_name }} · OBU Stu Wrapped{% endblock %}
 
 {% block meta %}
+{% set og_title = left.first_name ~ " + " ~ right.first_name ~ " · " ~ match.vibe %}
+{% set og_desc = match.compatibility ~ "% menu match · Compare your OBU Stu Wrapped." %}
+{% set og_image = url_for('og_site', _external=True, _scheme='https') %}
 <meta name="theme-color" content="#6c2bd9">
 <meta name="description" content="{{ left.first_name }} and {{ right.first_name }} compared their OBU dining Wrapped.">
-<meta property="og:title" content="{{ left.first_name }} + {{ right.first_name }} · {{ match.vibe }}">
-<meta property="og:description" content="{{ match.compatibility }}% menu match · Compare your OBU Stu Wrapped.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{ og_title }}">
+<meta property="og:description" content="{{ og_desc }}">
 <meta property="og:url" content="{{ share_url }}">
-<meta property="og:image" content="{{ url_for('og_site', _external=True, _scheme='https') }}">
+<meta property="og:image" content="{{ og_image }}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{{ site_name }}">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ og_title }}">
+<meta name="twitter:description" content="{{ og_desc }}">
+<meta name="twitter:image" content="{{ og_image }}">
 {% endblock %}
 
 {% macro money(value) %}${{ "{:,.2f}".format(value) }}{% endmacro %}
