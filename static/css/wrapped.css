@@ -156,6 +156,8 @@ body:has(.viewer) { transition: background-color .5s ease; }
 .summary .panel .text { font-size: calc(19 * var(--u)); }
 /* Model-written titles and item names have no length limit; keep the card inside its frame. */
 .summary .clamp-2, .summary .fact-detail { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+/* The display font's tight line box would let the clamp's overflow cut off descenders (Fry, Loyalist). */
+.summary .display.clamp-2 { line-height: 1.15; }
 .flex-line { display: flex; justify-content: space-between; align-items: baseline; margin-top: calc(20 * var(--u)); font-weight: 700; font-size: calc(17 * var(--u)); }
 .flex-line span { opacity: .75; }
 .summary .flex-line { margin-top: calc(14 * var(--u)); }

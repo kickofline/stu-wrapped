@@ -151,6 +151,16 @@ class AppTests(unittest.TestCase):
         self.assertEqual(app._meal_block(meta), {"name": "Basic Meals", "left": 26})
         self.assertIsNone(app._meal_block({"balances": {"Resident Meals": 98}}))
 
+    def test_tiger_express_purchases_stay_off_the_leaderboard(self):
+        buy = lambda where, total, item: {"date": "Sep 2, 2026 12:10PM", "location": where, "amount": -total,
+                                          "grand_total": total, "items": [],
+                                          "clean_items": [{"item": item, "detail": "", "qty": 1, "total": total}]}
+        summary = app._student_summary([buy("CFA 1", 5.25, "Chick-fil-A Sandwich"),
+                                        buy("Tiger Exp 1", 3.89, "Propel")], [])
+        self.assertEqual((summary["total_spend"], summary["visits"]), (5.25, 1))
+        self.assertNotIn("Propel", summary["items"])
+        self.assertNotIn("Tiger Express", summary["spots"])
+
     def test_slide_links_preview_the_owners_uploaded_slide(self):
         self._save_result("slideshare12")
         png = b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\x0dIHDR" + (1080).to_bytes(4, "big") + (1920).to_bytes(4, "big") + b"rest"

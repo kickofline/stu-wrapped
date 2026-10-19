@@ -231,14 +231,21 @@ def _record_raw_items(transactions: list) -> None:
         json.dump(sorted(known_set, key=str.lower), f, indent=2)
 
 
+def _leaderboard_purchases(transactions: list) -> list:
+    """Purchases that count on the Campus Leaderboard and in rankings: Tiger Express (the
+    Caf's grab-and-go counter) isn't a dining spot, so its Flex purchases are left out."""
+    return [t for t in transactions if spot_name(t["location"]) not in NOT_SPOTS]
+
+
 def _student_summary(transactions: list, swipes: list) -> dict:
+    transactions = _leaderboard_purchases(transactions)
     items = _aggregate_items(transactions)
     spots = defaultdict(int)
     for transaction in transactions:
         spots[spot_name(transaction["location"])] += 1
     return {
         "total_qty": sum(item["qty"] for item in items),
-        "total_spend": round(sum(item["total_spend"] for item in items), 2),
+        "total_spend": round(sum(flex_paid(t) for t in transactions), 2),
         "unique_items": len(items),
         "top_item": items[0]["name"] if items else None,
         "visits": len(transactions),
@@ -251,7 +258,7 @@ def _student_summary(transactions: list, swipes: list) -> dict:
 def _record_run(transactions: list, swipes: list, student_key: str, year: int) -> None:
     """Store this student's latest run in the campus-wide comparison stats."""
     summary = _student_summary(transactions, swipes)
-    summary.update(campus_activity(transactions, swipes, year))
+    summary.update(campus_activity(_leaderboard_purchases(transactions), swipes, year))
     summary["updated"] = datetime.now().isoformat(timespec="seconds")
     with _stats_lock:
         _record_raw_items(transactions)
