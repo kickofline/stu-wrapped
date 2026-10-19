@@ -1,21 +1,28 @@
 """Flex Bucks (Atrium) transaction scraper — plain HTTP, no browser.
 
 Atrium's guest login is an ordinary form post: GET the login page to get a
-session key (skey, also the jsa_session cookie), POST the guest email/password
-with that skey, and the skey becomes an authenticated session. Statement pages
-then take the skey as a query parameter. Session keys are bound to the client
-IP (see ben.page/wrapped), so the login and statement requests must come from
-the same machine — they do, both run here.
+session key (skey, also the jsa_session cookie) and POST the guest
+email/password with it. Success is a JS redirect to a "Please wait" page that
+activates the session; its script polls login-check.php until the skey is
+usable. Statement pages then take the skey as a query parameter. Session keys
+are bound to the client IP (see ben.page/wrapped), so every request runs here.
+Guests can only hold a few sessions at once ("Login sessions exceeded
+allowance"), so each run logs out when it is done.
 """
-from urllib.parse import parse_qs, urlencode, urlparse
+import re
+import time
+from urllib.parse import urlencode, urljoin
 
 import requests
 from bs4 import BeautifulSoup
 
-LOGIN_URL = "https://studentlink.atriumcampus.com/login.php?guest=1&cid=410"
-STATEMENT_BASE = "https://connectobu.atriumcampus.com/statementdetail.php"
+LOGIN_HOST = "https://studentlink.atriumcampus.com"
+LOGIN_URL = f"{LOGIN_HOST}/login.php?guest=1&cid=410"
+ACCOUNT_HOST = "https://connectobu.atriumcampus.com"
+STATEMENT_BASE = f"{ACCOUNT_HOST}/statementdetail.php"
 CID = "410"
 TIMEOUT = 30  # seconds per request
+ACTIVATION_POLLS = 30  # login-check.php attempts, 2 s apart
 USER_AGENT = "Mozilla/5.0 (compatible; OBU-Stu-Wrapped/2.0; +https://wrapped.drew.place)"
 
 
@@ -23,9 +30,12 @@ class LoginFailed(Exception):
     """Atrium rejected the guest email/password."""
 
 
-def _skey_from_url(url: str) -> str | None:
-    values = parse_qs(urlparse(url).query).get("skey", [])
-    return values[0] if values and values[0] else None
+class LoginLimited(Exception):
+    """Atrium refused the login for now ("Login sessions exceeded allowance")."""
+
+
+class NoAccounts(Exception):
+    """The guest login works but Atrium shows it no accounts to read."""
 
 
 def _login_form(html: str):
@@ -54,33 +64,86 @@ def login(session: requests.Session, username: str, password: str) -> str:
     resp.raise_for_status()
     if _login_form(resp.text) is not None:
         raise LoginFailed("Atrium did not accept the guest login")
+    # Atrium answers some refusals with an error page that has no login form.
+    error = re.search(r"Please fix the following errors:\s*(.+?)\s*(?:Footer Menu|$)",
+                      BeautifulSoup(resp.text, "lxml").get_text(" "), re.S)
+    if error:
+        message = re.sub(r"\s+", " ", error.group(1)).strip()
+        if "exceeded allowance" in message.lower():
+            raise LoginLimited(message)
+        raise LoginFailed(message)
 
-    skey = _skey_from_url(resp.url) or fields.get("skey")
-    if not skey:
-        raise RuntimeError("Atrium login succeeded but no session key was found")
+    # Success is a JS redirect to a "Please wait while we access your account"
+    # page; visiting it starts activation, and the page's script polls
+    # login-check.php until it reports 1 (ready) or -1 (refused).
+    skey = fields.get("skey")
+    hop = re.search(r"window\.location(?:\.href)?\s*=\s*['\"]([^'\"]+)['\"]", resp.text)
+    if not skey or not hop:
+        raise RuntimeError("Atrium login page changed: no session key or redirect after login")
+    session.get(urljoin(resp.url, hop.group(1)), timeout=TIMEOUT).raise_for_status()
+    _wait_for_activation(session, skey)
     return skey
 
 
-def build_statement_url(skey, startdate, enddate, acct="1"):
+def _wait_for_activation(session: requests.Session, skey: str) -> None:
+    for _ in range(ACTIVATION_POLLS):
+        resp = session.get(f"{LOGIN_HOST}/login-check.php", params={"cid": CID, "skey": skey}, timeout=TIMEOUT)
+        resp.raise_for_status()
+        status = re.search(r"<message>\s*(-?\d+)\s*</message>", resp.text)
+        if not status or status.group(1) == "-1":
+            raise LoginFailed("Atrium refused to activate the guest session")
+        if status.group(1) == "1":
+            return
+        time.sleep(2)
+    raise RuntimeError("Atrium never finished activating the guest session")
+
+
+def logout(session: requests.Session, skey: str) -> None:
+    """End the Atrium session; guests have a cap on concurrent sessions."""
+    try:
+        session.get(f"{ACCOUNT_HOST}/logout.php", params={"skey": skey, "cid": CID}, timeout=TIMEOUT)
+    except requests.RequestException:
+        pass
+
+
+def build_statement_url(skey, startdate, enddate, acct):
     params = {"cid": CID, "skey": skey, "startdate": startdate, "enddate": enddate, "acct": acct}
     return f"{STATEMENT_BASE}?{urlencode(params)}"
 
 
-def fetch_transactions(username, password, startdate, enddate, acct="1", progress=lambda step, msg: None):
-    """Log in and return parsed transactions between startdate and enddate (ISO dates)."""
+def list_accounts(session: requests.Session, skey: str) -> list[str]:
+    """Account ids the guest may view, from the statement page's account picker."""
+    resp = session.get(f"{ACCOUNT_HOST}/statementnew.php", params={"skey": skey, "cid": CID}, timeout=TIMEOUT)
+    resp.raise_for_status()
+    picker = BeautifulSoup(resp.text, "lxml").find("select", attrs={"name": "acctto"})
+    return [o["value"] for o in picker.find_all("option") if o.get("value")] if picker else []
+
+
+def fetch_transactions(username, password, startdate, enddate, progress=lambda step, msg: None):
+    """Log in and return parsed transactions between startdate and enddate (ISO dates)
+    across every account the guest can see."""
+    transactions = []
     with requests.Session() as session:
         session.headers["User-Agent"] = USER_AGENT
         progress(2, "Logging in to Flex Bucks...")
         skey = login(session, username, password)
+        try:
+            accounts = list_accounts(session, skey)
+            if not accounts:
+                raise NoAccounts("guest login has no viewable accounts")
 
-        progress(3, "Loading your transaction history...")
-        resp = session.get(build_statement_url(skey, startdate, enddate, acct), timeout=TIMEOUT)
-        resp.raise_for_status()
-        if _login_form(resp.text) is not None:
-            raise RuntimeError("Atrium sent the statement request back to the login page")
+            progress(3, "Loading your transaction history...")
+            for acct in accounts:
+                resp = session.get(build_statement_url(skey, startdate, enddate, acct), timeout=TIMEOUT)
+                resp.raise_for_status()
+                if _login_form(resp.text) is not None:
+                    raise RuntimeError("Atrium sent the statement request back to the login page")
+                transactions += parse_transactions(resp.text)
+        finally:
+            logout(session, skey)
 
     progress(4, "Parsing your food data...")
-    return parse_transactions(resp.text)
+    return transactions
 
 
 def _safe_float(td):

@@ -21,7 +21,7 @@ from mailbox import (delete_credentials, is_tag, load_credentials, new_tag,
                      parse_invite, plus_address, save_credentials,
                      tag_from_recipient)
 from name_map import expand_name
-from scraper import LoginFailed, fetch_transactions
+from scraper import LoginFailed, LoginLimited, NoAccounts, fetch_transactions
 
 app = Flask(__name__)
 app.secret_key = "LUKERMKNGAONMXXMGJYAAGYMRIVVECNV"
@@ -165,16 +165,24 @@ def _start_job(job_id: str, tag: str, invite: dict) -> None:
 
 def _run_job(job_id: str, tag: str, invite: dict) -> None:
     startdate, enddate, label = _semester_dates()
-    acct = "1"
     try:
         transactions = fetch_transactions(
-            invite["username"], invite["password"], startdate, enddate, acct,
+            invite["username"], invite["password"], startdate, enddate,
             progress=lambda step, msg: update_progress(job_id, step, msg),
         )
     except LoginFailed:
         delete_credentials(tag)
         fail(job_id, "Flex Bucks didn't accept the login from your invite email. "
                      "Remove our address from your Flex Bucks guests, add it again, then hit Generate.")
+        return
+    except LoginLimited:
+        fail(job_id, "Flex Bucks is limiting logins for your guest right now. "
+                     "Wait about 15 minutes and hit Generate again; your invite is saved.")
+        return
+    except NoAccounts:
+        fail(job_id, "We could log in, but Flex Bucks isn't showing your guest any accounts. "
+                     "Check that you're on a meal plan, then in Grant Guest Access make sure the guest "
+                     "is allowed to view your account activity, and hit Generate again.")
         return
     except Exception:
         _log(f"[job {job_id}] scrape failed:\n{traceback.format_exc()}")
@@ -190,7 +198,7 @@ def _run_job(job_id: str, tag: str, invite: dict) -> None:
     update_progress(job_id, 5, "Wrapping it up...")
     metadata = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "startdate": startdate, "enddate": enddate, "acct": acct,
+        "startdate": startdate, "enddate": enddate,
         "name": invite.get("name"),
     }
     share_id = _save_result(transactions, metadata)

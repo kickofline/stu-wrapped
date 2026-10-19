@@ -60,7 +60,8 @@ def _weekday_counts(start: date, end: date) -> Counter:
 
 def time_insights(transactions: list, startdate: str, enddate: str) -> dict | None:
     start, end = date.fromisoformat(startdate), date.fromisoformat(enddate)
-    timed = [(parse_when(tx["date"], start.year), tx["location"]) for tx in transactions]
+    # Atrium names each register ("CFA 1", "CFA 2"); count them as one spot.
+    timed = [(parse_when(tx["date"], start.year), re.sub(r"\s+\d+$", "", tx["location"])) for tx in transactions]
     timed = [(when, loc) for when, loc in timed if when]
     if not timed:
         return None
