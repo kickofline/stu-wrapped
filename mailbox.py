@@ -1,11 +1,11 @@
-"""Per-browser plus-address inboxes and the Flex Bucks guest-invite emails sent to them.
+"""Per-browser inbox addresses and the Flex Bucks guest-invite emails sent to them.
 
 Each browser gets a short random tag (kept in a cookie). The student invites
-cafwrapped+<tag>@wrapped.drew.place as a Flex Bucks guest; the Cloudflare Email
-Worker forwards the raw invite to /api/inbound, which parses it here and stores
-the guest login under that tag so the same browser can re-run later without
-inviting again. Tags are 6 hex characters: short enough to type, and with ~2000
-OBU students collisions and guessing don't matter for meal-plan data.
+<tag>@stu.exposed as a Flex Bucks guest; the Cloudflare Email Worker forwards
+the raw invite to /api/inbound, which parses it here and stores the guest login
+under that tag so the same browser can re-run later without inviting again.
+Tags are 6 hex characters: short enough to type, and with ~2000 OBU students
+collisions and guessing don't matter for meal-plan data.
 """
 import json
 import os
@@ -16,12 +16,12 @@ from email import message_from_bytes, policy
 
 from bs4 import BeautifulSoup
 
-DOMAIN = "wrapped.drew.place"
+DOMAIN = "stu.exposed"
 CREDENTIALS_DIR = os.path.join(os.path.dirname(__file__), "data", "credentials")
 
 # 6 hex for new tags; 16 accepts invites sent to the longer tags used briefly before.
 _TAG_RE = re.compile(r"^(?:[0-9a-f]{6}|[0-9a-f]{16})$")
-_RECIPIENT_RE = re.compile(r"cafwrapped\+([0-9a-f]{16}|[0-9a-f]{6})@", re.IGNORECASE)
+_RECIPIENT_RE = re.compile(r"(?:^|[<\s])([0-9a-f]{16}|[0-9a-f]{6})@", re.IGNORECASE)
 _USERNAME_RE = re.compile(r"(?:username|login)\s*:\s*(\S+)", re.IGNORECASE)
 _PASSWORD_RE = re.compile(r"password\s*:\s*(\S+)", re.IGNORECASE)
 _NAME_RE = re.compile(r"\bname\s*:\s*([A-Za-z][A-Za-z .'-]*?)\s*(?:https?://|\n|$)", re.IGNORECASE)
@@ -35,8 +35,8 @@ def is_tag(value: str | None) -> bool:
     return bool(value) and bool(_TAG_RE.match(value))
 
 
-def plus_address(tag: str) -> str:
-    return f"cafwrapped+{tag}@{DOMAIN}"
+def inbox_address(tag: str) -> str:
+    return f"{tag}@{DOMAIN}"
 
 
 def tag_from_recipient(recipient: str) -> str | None:
@@ -68,7 +68,7 @@ def parse_invite(raw: bytes, tag: str) -> dict | None:
     username = _USERNAME_RE.search(text)
     name = _NAME_RE.search(text)
     return {
-        "username": username.group(1) if username else plus_address(tag),
+        "username": username.group(1) if username else inbox_address(tag),
         "password": password.group(1),
         "name": name.group(1).strip() if name else None,
     }

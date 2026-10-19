@@ -23,9 +23,8 @@ from social import (campus_percentiles, dining_badges, friend_match,
                     signature_order, summary_highlights)
 from jobs import (active_job_for, claim, claim_waiting, cleanup_old_jobs,
                   create_job, fail, finish, get_job, update_progress)
-from mailbox import (delete_credentials, is_tag, load_credentials, new_tag,
-                     parse_invite, plus_address, save_credentials,
-                     tag_from_recipient)
+from mailbox import (delete_credentials, inbox_address, is_tag, load_credentials,
+                     new_tag, parse_invite, save_credentials, tag_from_recipient)
 from name_map import expand_name
 from scraper import LoginFailed, LoginLimited, NoAccounts, fetch_activity
 
@@ -347,7 +346,7 @@ def index():
     tag = request.cookies.get(INBOX_COOKIE)
     if not is_tag(tag):
         tag = new_tag()
-    resp = Response(render_template("index.html", plus_address=plus_address(tag), semester_label=_semester_dates()[2]))
+    resp = Response(render_template("index.html", inbox_address=inbox_address(tag), semester_label=_semester_dates()[2]))
     resp.set_cookie(INBOX_COOKIE, tag, max_age=365 * 24 * 3600, httponly=True, samesite="Lax",
                     secure=request.is_secure or request.headers.get("X-Forwarded-Proto") == "https")
     return resp
@@ -375,7 +374,7 @@ def wait(job_id):
     if not job:
         flash("That run expired. Hit Generate again.", "error")
         return redirect(url_for("index"))
-    return render_template("waiting.html", job=job, plus_address=plus_address(job["tag"]))
+    return render_template("waiting.html", job=job, inbox_address=inbox_address(job["tag"]))
 
 
 @app.get("/status/<job_id>")

@@ -20,7 +20,7 @@
     <div class="waiting-hint" id="waiting-hint"{% if job.status != 'waiting' %} style="display:none"{% endif %}>
       <p>Haven't added us yet? Add this guest email in Flex Bucks and keep this page open — it starts the second the invite lands.</p>
       <div class="chip">
-        <code id="plus-addr-text">{{ plus_address }}</code>
+        <code id="plus-addr-text">{{ inbox_address }}</code>
         <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('plus-addr-text').textContent.trim()); this.textContent='Copied!'">Copy</button>
       </div>
       <a class="pill pill-light" href="https://connectobu.atriumcampus.com/guestaccess.php" target="_blank" rel="noopener">Open Flex Bucks ↗</a>

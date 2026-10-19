@@ -1,5 +1,5 @@
 /**
- * Cloudflare Email Worker for *@wrapped.drew.place.
+ * Cloudflare Email Worker for *@stu.exposed.
  * Hands every message to the app untouched; parsing and matching happen in
  * the app's /api/inbound so this never needs redeploying for logic changes.
  */

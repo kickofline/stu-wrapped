@@ -119,7 +119,7 @@ async function shareSlide() {
   const file = new File([blob], `obu-stu-wrapped-${index + 1}.png`, { type: 'image/png' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: SHARE_TITLE, text: 'Get yours at wrapped.drew.place' });
+      await navigator.share({ files: [file], title: SHARE_TITLE, text: 'Get yours at stu.exposed' });
     } catch (err) {
       // iOS refuses if rendering took long enough to expire the tap; the image is
       // cached now, so the next tap shares instantly.

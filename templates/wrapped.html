@@ -20,7 +20,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/wrapped.css') }}">
 {% endblock %}
 
-{% macro foot(text="wrapped.drew.place") %}<p class="foot">{{ text }}</p>{% endmacro %}
+{% macro foot(text="stu.exposed") %}<p class="foot">{{ text }}</p>{% endmacro %}
 {% macro blobs() %}<i class="blob b1"></i><i class="blob b2"></i>{% endmacro %}
 {% macro money(v) %}${{ "{:,.2f}".format(v) }}{% endmacro %}
 
@@ -309,7 +309,7 @@
         <div class="flex-line"><span>Flex left{% if flex.runs_out %} · out by {{ flex.runs_out }}{% endif %}</span><b class="stat">{{ money(flex.balance) }}</b></div>
         {% endif %}
       </div>
-      {{ foot("get yours @ wrapped.drew.place") }}
+      {{ foot("get yours @ stu.exposed") }}
     </div></section>
 
     <!-- ── Outro (not a share image: the share button sends the link) ── -->

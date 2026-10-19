@@ -23,7 +23,7 @@ STATEMENT_BASE = f"{ACCOUNT_HOST}/statementdetail.php"
 CID = "410"
 TIMEOUT = 30  # seconds per request
 ACTIVATION_POLLS = 30  # login-check.php attempts, 2 s apart
-USER_AGENT = "Mozilla/5.0 (compatible; OBU-Stu-Wrapped/2.0; +https://wrapped.drew.place)"
+USER_AGENT = "Mozilla/5.0 (compatible; OBU-Stu-Wrapped/2.0; +https://stu.exposed)"
 
 
 class LoginFailed(Exception):

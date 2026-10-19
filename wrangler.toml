@@ -1,8 +1,8 @@
-name = "wrapped"
+name = "stu-exposed"
 main = "worker.js"
 compatibility_date = "2026-10-01"
 
 [vars]
-APP_URL = "https://wrapped.drew.place"
+APP_URL = "https://stu.exposed"
 # CREDENTIAL_SECRET is a Worker secret (npx wrangler secret put CREDENTIAL_SECRET);
 # it must match the app's CREDENTIAL_SECRET env var in Coolify.

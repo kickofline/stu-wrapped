@@ -35,7 +35,7 @@ def render(path: str, heading: str, subtitle: str) -> None:
     draw.text((left, 150), "OBU STU", font=title, fill=LIME)
     draw.text((left, 290), "WRAPPED", font=title, fill=LIME)
     draw.text((left, 480), subtitle, font=_fit(draw, subtitle, lambda s: _inter(s), 38, max_width), fill=WHITE)
-    draw.text((left, 545), "wrapped.drew.place", font=_inter(30, "Bold"), fill="#c9d3ef")
+    draw.text((left, 545), "stu.exposed", font=_inter(30, "Bold"), fill="#c9d3ef")
 
     tmp = path + ".tmp"
     img.save(tmp, "PNG", optimize=True)
