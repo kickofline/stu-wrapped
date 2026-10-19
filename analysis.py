@@ -19,7 +19,7 @@ import threading
 import requests
 
 from insights import spot_name
-from name_map import canonical_name, expand_name
+from name_map import canonical_item, expand_name
 
 BASE_URL = os.environ.get("LITELLM_BASE_URL", "")
 API_KEY = os.environ.get("LITELLM_API_KEY", "")
@@ -28,7 +28,7 @@ TIMEOUT = 120
 
 MENUS_FILE = os.path.join(os.path.dirname(__file__), "menus.md")
 CACHE_FILE = os.path.join(os.path.dirname(__file__), "data", "normalize_cache.json")
-NORMALIZE_CACHE_VERSION = "3"  # bump whenever receipt-cleanup rules change
+NORMALIZE_CACHE_VERSION = "4"  # bump whenever receipt-cleanup rules change (4: menus.md)
 _cache_lock = threading.Lock()
 
 
@@ -78,7 +78,7 @@ NORMALIZE_SYSTEM = """You clean up college dining register receipts.
 Each receipt is one purchase: a location and its register lines (quantity x name $line total).
 Lines are abbreviated, and add-ons are separate lines that belong to the item before them:
 milk swaps, syrups, extra shots, sauces, "Add ..." lines, combo upsizes, and included $0 sides or drinks.
-At Tacos 4 Life, "Hungry for More" is a $5 combo upsell/modifier: fold it and the following included $0 side and drink into the entrée it modifies; never output any of those lines as standalone items.
+At Tacos 4 Life, "Hungry for More" is the $5 "make it a meal" upsell: fold it and the following included $0 side and drink into the entrée it modifies, with "Meal" in that item's detail; never output any of those lines as standalone items.
 At Dr. Jack's, "Matcha Tea" and "Matcha Latte" are the same drink; always name the item "Matcha Latte".
 For every receipt, return the real items the student got:
 - Fold add-on lines into the item they modify; add their price to that item's total.
@@ -119,16 +119,12 @@ def _display_name(name: str) -> str:
 
 
 def _canonical_items(items: list, spot: str) -> list:
-    """One name per menu item: raw-text safety net, known aliases, and a combo meal
-    counted as its main item ("Chick-fil-A Sandwich Meal" -> "Chick-fil-A Sandwich",
-    detail "Meal"), so a student's sandwich count includes the sandwiches in meals."""
+    """One name per menu item (raw-text safety net, then name_map.canonical_item): a meal
+    counts as its main item, nugget counts stay in the name, variants share one name."""
     out = []
     for item in items:
-        name, detail = _display_name(item["item"]), (item.get("detail") or "").strip()
-        if name.lower().endswith(" meal"):
-            name = name[:-5].strip()
-            detail = f"Meal, {detail}" if detail else "Meal"
-        out.append({**item, "item": canonical_name(name, spot), "detail": detail})
+        name, detail = canonical_item(_display_name(item["item"]), item.get("detail") or "", spot)
+        out.append({**item, "item": name, "detail": detail})
     return out
 
 
@@ -176,9 +172,7 @@ def normalize(transactions: list) -> None:
         else:
             pending.setdefault(sig, []).append(tx)
 
-    sigs = list(pending)
-    for start in range(0, len(sigs), 60):
-        batch = sigs[start:start + 60]
+    def clean_batch(batch: list) -> None:
         receipts = "\n".join(f"#{n} {sig}" for n, sig in enumerate(batch))
         reply = _chat(NORMALIZE_SYSTEM + "\n\nMENUS:\n" + _menus(), receipts, max_tokens=8000)
         for receipt in reply.get("receipts", []):
@@ -195,6 +189,17 @@ def normalize(transactions: list) -> None:
             cache[_cache_key(sig)] = clean
             for tx in pending[sig]:
                 tx["clean_items"] = clean
+
+    sigs = list(pending)
+    for start in range(0, len(sigs), 60):
+        clean_batch(sigs[start:start + 60])
+    # A big receipt that failed inside a batch (totals off, skipped) usually cleans on
+    # its own; one retry each, so its raw register lines don't reach the slides.
+    for sig in [s for s in sigs if "clean_items" not in pending[s][0]][:10]:
+        try:
+            clean_batch([sig])
+        except Exception:
+            continue
 
     with _cache_lock:
         merged = {**_load_cache(), **cache}

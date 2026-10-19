@@ -63,6 +63,34 @@ class NormalizeTests(unittest.TestCase):
         analysis.canonicalize(receipts)  # applying it again changes nothing
         self.assertEqual(receipts[0]["clean_items"][0]["detail"], "Meal, Sub Mac & Cheese")
 
+    def test_nugget_counts_minis_and_combos(self):
+        from name_map import canonical_item
+        cases = {
+            ("Chick-fil-A Nuggets (4 ct) Meal", ""): ("Chick-n-Minis (4 ct)", "Meal"),
+            ("Chick-fil-A Minis (4 ct)", ""): ("Chick-n-Minis (4 ct)", ""),
+            ("Chick-fil-A Nuggets", "8 ct"): ("Chick-fil-A Nuggets (8 ct)", ""),
+            ("Grilled Nuggets", "12 ct, Sub Mac n Cheese"): ("Chick-fil-A Grilled Nuggets (12 ct)", "Sub Mac n Cheese"),
+            ("Chargrill Combo", ""): ("Grilled Chicken Sandwich", "Meal"),
+            ("Full Queso Rice Bowl", "Add Chicken"): ("Grilled Chicken & Queso Rice Bowl", "Full, Add Chicken"),
+            ("Chips & Queso", "Small"): ("Queso & Chips", "Small"),
+        }
+        for (name, detail), expected in cases.items():
+            self.assertEqual(canonical_item(name, detail, "CFA"), expected, name)
+
+    def test_a_receipt_that_fails_in_its_batch_is_retried_alone(self):
+        big = {"location": "Tacos 1", "items": [{"name": "Classic Beef Taco", "qty": 1, "subtotal": 4.95},
+                                                {"name": "Hungry for More", "qty": 1, "subtotal": 5.00}]}
+        calls = []
+
+        def chat(_system, receipts, **_):
+            calls.append(receipts)
+            total = 9.95 if len(calls) > 1 else 4.95  # first answer drops the meal price
+            return {"receipts": [{"id": 0, "items": [{"item": "Classic Beef Taco", "detail": "Meal", "qty": 1, "total": total}]}]}
+        analysis._chat = chat
+        analysis.normalize([big])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(big["clean_items"][0]["total"], 9.95)
+
 
 if __name__ == "__main__":
     unittest.main()

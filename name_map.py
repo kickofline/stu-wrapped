@@ -5,6 +5,8 @@
 # Maps Atrium's abbreviated item names to display-friendly full names.
 # Keys are lowercase for case-insensitive matching.
 
+import re
+
 NAME_MAP: dict[str, str] = {
     # Fountain drinks
     "32 oz fou": "32 oz Fountain Drink",
@@ -91,18 +93,84 @@ def expand_name(raw: str) -> str:
 CANONICAL: dict[str, str] = {
     "spicy sandwich": "Spicy Chicken Sandwich",
     "waffle fry": "Waffle Fries",
+    "chick-fil-a waffle fries": "Waffle Fries",
+    "chick-fil-a biscuit": "Chicken Biscuit",
+    "chargrill": "Grilled Chicken Sandwich",
+    "grilled club": "Grilled Chicken Club Sandwich",
+    "hashbrowns": "Hash Browns",
+    "hb scramble burrito": "Hash Brown Scramble Burrito",
+    "hashbrown scramble burrito": "Hash Brown Scramble Burrito",
+    "hb scramble bowl": "Hash Brown Scramble Bowl",
+    "hashbrown scramble bowl": "Hash Brown Scramble Bowl",
     "cbr quesadilla": "Chicken Bacon Ranch Quesadilla",
     "cbr taco": "Chicken Bacon Ranch Taco",
-    "queso and chips": "Chips & Queso",
-    "chips and queso": "Chips & Queso",
-    "chips & queso": "Chips & Queso",
+    # Tacos 4 Life board names (menus.md)
+    "queso and chips": "Queso & Chips",
+    "chips and queso": "Queso & Chips",
+    "chips & queso": "Queso & Chips",
+    "buffalo chicken taco": "Buffalo Fried Chicken Taco",
+    "refried beans": "Refried Black Beans",
+    "chicken quesadilla": "Grilled Chicken Quesadilla",
+    "queso rice bowl": "Grilled Chicken & Queso Rice Bowl",
+    "sopapilla": "Sopapillas",
+    # Dr. Jack's
+    "matcha tea": "Matcha Latte",
     "fontn hot chocolt": "Hot Chocolate",
 }
 SPOT_CANONICAL: dict[tuple[str, str], str] = {
     ("CFA", "cookie"): "Chocolate Chunk Cookie",
 }
+# Names whose size or flavor belongs in the detail: name -> (item, detail to add).
+DETAIL_ALIASES: dict[str, tuple[str, str]] = {
+    "full queso rice bowl": ("Grilled Chicken & Queso Rice Bowl", "Full"),
+    "half queso rice bowl": ("Grilled Chicken & Queso Rice Bowl", "Half"),
+    "alani": ("Alani Nu", ""),
+    "alani - hawaiian": ("Alani Nu", "Hawaiian"),
+    "alani nu - hawaiian": ("Alani Nu", "Hawaiian"),
+}
+# Nuggets keep their count in the name. CFA's 4-count nuggets are always Chick-n-Minis.
+NUGGETS: dict[str, str] = {
+    "chick-fil-a nuggets": "Chick-fil-A Nuggets", "nuggets": "Chick-fil-A Nuggets",
+    "chick-fil-a grilled nuggets": "Chick-fil-A Grilled Nuggets", "grilled nuggets": "Chick-fil-A Grilled Nuggets",
+    "chick-fil-a minis": "Chick-n-Minis", "chick-n-minis": "Chick-n-Minis", "minis": "Chick-n-Minis",
+}
+_MEAL = re.compile(r"^(.*?)\s+(?:meal|combo)$", re.IGNORECASE)
+_COUNTED = re.compile(r"^(.*?)\s*\((\d+)\s*ct\)$", re.IGNORECASE)
+_COUNT_PART = re.compile(r"^(\d+)\s*(?:ct|count|pc)$", re.IGNORECASE)
 
 
-def canonical_name(name: str, spot: str | None = None) -> str:
-    key = name.lower().strip()
-    return SPOT_CANONICAL.get((spot, key)) or CANONICAL.get(key) or name.strip()
+def _join(*parts: str) -> str:
+    seen, out = set(), []
+    for part in (p.strip() for chunk in parts for p in chunk.split(",")):
+        if part and part.casefold() not in seen:
+            seen.add(part.casefold())
+            out.append(part)
+    return ", ".join(out)
+
+
+def canonical_item(name: str, detail: str = "", spot: str | None = None) -> tuple[str, str]:
+    """(name, detail) with one name per menu item: a meal or combo counts as its main
+    item (detail "Meal"), nugget counts live in the name, and known variants share a name."""
+    name, detail = name.strip(), _join(detail)
+    meal = _MEAL.match(name)
+    if meal:
+        name, detail = meal.group(1).strip(), _join("Meal", detail)
+    if name.lower() in DETAIL_ALIASES:
+        name, extra = DETAIL_ALIASES[name.lower()]
+        detail = _join(extra, detail)
+
+    counted = _COUNTED.match(name)
+    base, count = (counted.group(1).strip(), counted.group(2)) if counted else (name, None)
+    if base.lower() in NUGGETS:
+        parts = [p.strip() for p in detail.split(",") if p.strip()]
+        for part in parts:
+            if not count and (m := _COUNT_PART.match(part)):
+                count = m.group(1)
+        detail = ", ".join(p for p in parts if not _COUNT_PART.match(p))
+        kind = NUGGETS[base.lower()]
+        if kind == "Chick-fil-A Nuggets" and count == "4":
+            kind = "Chick-n-Minis"
+        return (f"{kind} ({count} ct)" if count else kind), detail
+
+    key = name.lower()
+    return SPOT_CANONICAL.get((spot, key)) or CANONICAL.get(key) or name, detail
