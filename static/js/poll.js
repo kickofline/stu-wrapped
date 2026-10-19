@@ -6,6 +6,7 @@ const stepNum    = document.getElementById('step-num');
 const errorBox   = document.getElementById('error-box');
 const errorMsg   = document.getElementById('error-msg');
 const spinner    = document.getElementById('spinner');
+const waitHint   = document.getElementById('waiting-hint');
 
 let intervalId = null;
 
@@ -17,6 +18,7 @@ function updateUI(data) {
   if (statusMsg)  statusMsg.textContent  = data.message || '';
   if (progressEl) progressEl.style.width = pct + '%';
   if (stepNum)    stepNum.textContent    = data.step;
+  if (waitHint)   waitHint.style.display = data.status === 'waiting' ? '' : 'none';
 }
 
 function poll() {

@@ -13,8 +13,8 @@
       <p class="dash-subtitle">{{ metadata.startdate }} → {{ metadata.enddate }}</p>
     </div>
     <div class="dash-actions">
-      <a href="{{ url_for('wrapped', job_id=job_id) }}" class="btn-primary">View Slideshow →</a>
-      <a href="{{ url_for('download_csv', job_id=job_id) }}" class="btn-secondary">Download CSV</a>
+      <a href="{{ url_for('wrapped', share_id=share_id) }}" class="btn-primary">View Slideshow →</a>
+      <a href="{{ url_for('download_csv', share_id=share_id) }}" class="btn-secondary">Download CSV</a>
     </div>
   </header>
 

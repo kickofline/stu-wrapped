@@ -1,31 +1,44 @@
+import hmac
 import json
 import os
+import re
 import secrets
 import threading
+import traceback
 from collections import defaultdict
 from datetime import date, datetime
 
-
 from dotenv import load_dotenv
-from flask import (Flask, Response, flash, jsonify, redirect,
+from flask import (Flask, Response, abort, flash, jsonify, redirect,
                    render_template, request, url_for)
 
 load_dotenv()
 
-from email_watcher import make_plus_address
-from jobs import cleanup_old_jobs, create_job, get_job, set_credentials, get_credentials
+from insights import time_insights
+from jobs import (active_job_for, claim, claim_waiting, cleanup_old_jobs,
+                  create_job, fail, finish, get_job, update_progress)
+from mailbox import (delete_credentials, is_tag, load_credentials, new_tag,
+                     parse_invite, plus_address, save_credentials,
+                     tag_from_recipient)
 from name_map import expand_name
-from scraper import run_scrape_job
+from scraper import LoginFailed, fetch_transactions
 
 app = Flask(__name__)
 app.secret_key = "LUKERMKNGAONMXXMGJYAAGYMRIVVECNV"
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # raw invite emails
 
-STATS_FILE       = os.path.join(os.path.dirname(__file__), "data", "stats.json")
-RAW_ITEMS_FILE   = os.path.join(os.path.dirname(__file__), "data", "raw_items.json")
-CREDENTIALS_DIR  = os.path.join(os.path.dirname(__file__), "data", "credentials")
+DATA_DIR       = os.path.join(os.path.dirname(__file__), "data")
+STATS_FILE     = os.path.join(DATA_DIR, "stats.json")
+RAW_ITEMS_FILE = os.path.join(DATA_DIR, "raw_items.json")
+RESULTS_DIR    = os.path.join(DATA_DIR, "results")
 
-# Ensure credentials directory exists
-os.makedirs(CREDENTIALS_DIR, exist_ok=True)
+INBOX_COOKIE = "inbox"
+_SHARE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{12}$")
+_stats_lock = threading.Lock()
+
+
+def _log(*args):
+    print(*args, flush=True)
 
 
 def _location_stats(transactions: list, keywords: tuple) -> tuple:
@@ -97,6 +110,22 @@ def _record_raw_items(transactions: list) -> None:
         json.dump(sorted(known_set, key=str.lower), f, indent=2)
 
 
+def _record_run(transactions: list) -> None:
+    """Add one finished run to the campus-wide comparison stats."""
+    items = _aggregate_items(transactions)
+    with _stats_lock:
+        _record_raw_items(transactions)
+        stats = _load_stats()
+        stats["total_runs"] += 1
+        stats["all_total_qtys"].append(sum(i["qty"] for i in items))
+        stats.setdefault("all_total_spends", []).append(round(sum(i["total_spend"] for i in items), 2))
+        stats["all_unique_items"].append(len(items))
+        if items:
+            top = items[0]["name"]
+            stats["top_items"][top] = stats["top_items"].get(top, 0) + 1
+        _save_stats(stats)
+
+
 def _semester_dates() -> tuple[str, str, str]:
     today = date.today()
     if today.month <= 6:
@@ -108,109 +137,169 @@ def _semester_dates() -> tuple[str, str, str]:
     return start.isoformat(), today.isoformat(), label
 
 
+# ── Results (persisted so share links outlive restarts) ─────────────────────
+
+def _save_result(transactions: list, metadata: dict) -> str:
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    share_id = secrets.token_urlsafe(9)
+    with open(os.path.join(RESULTS_DIR, f"{share_id}.json"), "w", encoding="utf-8") as f:
+        json.dump({"transactions": transactions, "metadata": metadata}, f)
+    return share_id
+
+
+def _load_result(share_id: str) -> dict:
+    if not _SHARE_ID_RE.match(share_id):
+        abort(404)
+    try:
+        with open(os.path.join(RESULTS_DIR, f"{share_id}.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        abort(404)
+
+
+# ── Jobs ─────────────────────────────────────────────────────────────────────
+
+def _start_job(job_id: str, tag: str, invite: dict) -> None:
+    threading.Thread(target=_run_job, args=(job_id, tag, invite), daemon=True).start()
+
+
+def _run_job(job_id: str, tag: str, invite: dict) -> None:
+    startdate, enddate, label = _semester_dates()
+    acct = "1"
+    try:
+        transactions = fetch_transactions(
+            invite["username"], invite["password"], startdate, enddate, acct,
+            progress=lambda step, msg: update_progress(job_id, step, msg),
+        )
+    except LoginFailed:
+        delete_credentials(tag)
+        fail(job_id, "Flex Bucks didn't accept the login from your invite email. "
+                     "Remove our address from your Flex Bucks guests, add it again, then hit Generate.")
+        return
+    except Exception:
+        _log(f"[job {job_id}] scrape failed:\n{traceback.format_exc()}")
+        fail(job_id, "We couldn't load your Flex Bucks history right now. Try again in a few minutes.")
+        return
+
+    _log(f"[job {job_id}] fetched {len(transactions)} transactions")
+    if not transactions:
+        fail(job_id, f"We didn't find any Flex Bucks purchases for {label}. "
+                     "If you're not on a meal plan, there's nothing to wrap yet!")
+        return
+
+    update_progress(job_id, 5, "Wrapping it up...")
+    metadata = {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "startdate": startdate, "enddate": enddate, "acct": acct,
+        "name": invite.get("name"),
+    }
+    share_id = _save_result(transactions, metadata)
+    _record_run(transactions)
+    finish(job_id, share_id)
+
+
+# ── Routes ───────────────────────────────────────────────────────────────────
+
 @app.get("/")
 def index():
-    return render_template("index.html")
-
-
-@app.get("/address")
-def address():
-    sid = request.args.get("student_id", "").strip()
-    if not sid.isdigit() or len(sid) != 5:
-        return jsonify({"error": "Enter your numeric OBU student ID"}), 400
-    return jsonify({"plus_address": make_plus_address(sid)})
+    tag = request.cookies.get(INBOX_COOKIE)
+    if not is_tag(tag):
+        tag = new_tag()
+    resp = Response(render_template("index.html", plus_address=plus_address(tag)))
+    resp.set_cookie(INBOX_COOKIE, tag, max_age=365 * 24 * 3600, httponly=True, samesite="Lax",
+                    secure=request.is_secure or request.headers.get("X-Forwarded-Proto") == "https")
+    return resp
 
 
 @app.post("/start")
 def start():
     cleanup_old_jobs()
-
-    sid = request.form.get("student_id", "").strip()
-    if not sid.isdigit() or len(sid) < 4:
-        flash("Please enter a valid OBU student ID.", "error")
+    tag = request.cookies.get(INBOX_COOKIE)
+    if not is_tag(tag):
+        flash("Your browser didn't keep our cookie. Enable cookies and try again.", "error")
         return redirect(url_for("index"))
 
-    startdate, enddate, _ = _semester_dates()
-    acct = "1"
-
-    plus_address = make_plus_address(sid)
-    job_id = create_job(total_steps=10, plus_address=plus_address, job_id=secrets.token_hex(4))
-    print(f"[app] /start created job={job_id} plus_address={plus_address}", flush=True)
-
-    thread = threading.Thread(
-        target=run_scrape_job,
-        args=(job_id, startdate, enddate, plus_address, acct),
-        daemon=True,
-    )
-    thread.start()
-
+    job = active_job_for(tag)
+    job_id = job["job_id"] if job else create_job(tag)
+    invite = load_credentials(tag)
+    if invite and claim(job_id):
+        _start_job(job_id, tag, invite)
     return redirect(url_for("wait", job_id=job_id))
 
 
 @app.get("/wait/<job_id>")
 def wait(job_id):
     job = get_job(job_id)
-    print(f"[app] /wait job={job_id} found={job is not None}", flush=True)
     if not job:
-        flash("Job not found.", "error")
+        flash("That run expired. Hit Generate again.", "error")
         return redirect(url_for("index"))
-    return render_template("waiting.html", job=job)
+    return render_template("waiting.html", job=job, plus_address=plus_address(job["tag"]))
 
 
 @app.get("/status/<job_id>")
 def status(job_id):
     job = get_job(job_id)
     if not job:
-        return jsonify({"status": "error", "message": "Job not found"}), 404
+        return jsonify({"status": "error", "message": "That run expired. Hit Generate again."}), 404
 
-    resp = {
+    return jsonify({
         "status": job["status"],
         "step": job["step"],
         "total_steps": job["total_steps"],
         "message": job["message"],
-        "redirect": None,
-        "error": job.get("error"),
-    }
-    if job["status"] == "done":
-        resp["redirect"] = url_for("wrapped", job_id=job_id)
-
-    return jsonify(resp)
+        "redirect": url_for("wrapped", share_id=job["share_id"]) if job["status"] == "done" else None,
+        "error": job["error"],
+    })
 
 
-@app.get("/results/<job_id>")
-def results(job_id):
-    job = get_job(job_id)
-    if not job or job["status"] != "done":
-        flash("Results not available.", "error")
-        return redirect(url_for("index"))
+@app.post("/api/inbound")
+def api_inbound():
+    """Raw invite email forwarded by the Cloudflare Email Worker."""
+    secret = os.environ.get("CREDENTIAL_SECRET", "")
+    provided = request.headers.get("X-Credential-Secret", "")
+    if not secret or not hmac.compare_digest(provided.encode(), secret.encode()):
+        return jsonify({"error": "unauthorized"}), 401
 
-    transactions = job["result"]
-    items = _aggregate_items(transactions)
-    total_qty = sum(i["qty"] for i in items)
-    total_spend = round(sum(i["total_spend"] for i in items), 2)
+    recipient = request.headers.get("X-Envelope-To", "")
+    tag = tag_from_recipient(recipient)
+    if not tag:
+        _log(f"[inbound] ignoring mail for unknown recipient {recipient!r}")
+        return jsonify({"error": "unknown recipient"}), 422
 
+    invite = parse_invite(request.get_data(), tag)
+    if not invite:
+        _log(f"[inbound] no password in {len(request.get_data())}-byte email for inbox {tag[:4]}...")
+        return jsonify({"error": "no credentials found"}), 422
+
+    save_credentials(tag, invite)
+    woken = claim_waiting(tag)
+    for job_id in woken:
+        _start_job(job_id, tag, invite)
+    _log(f"[inbound] stored invite for inbox {tag[:4]}..., started {len(woken)} waiting run(s)")
+    return jsonify({"ok": True})
+
+
+@app.get("/results/<share_id>")
+def results(share_id):
+    result = _load_result(share_id)
+    items = _aggregate_items(result["transactions"])
     return render_template(
         "dashboard.html",
         items=items,
         items_json=json.dumps(items),
-        metadata=job["metadata"],
-        total_qty=total_qty,
-        total_spend=total_spend,
+        metadata=result["metadata"],
+        total_qty=sum(i["qty"] for i in items),
+        total_spend=round(sum(i["total_spend"] for i in items), 2),
         unique_items=len(items),
-        job_id=job_id,
+        share_id=share_id,
     )
 
 
-@app.get("/wrapped/<job_id>")
-def wrapped(job_id):
-    job = get_job(job_id)
-    if not job or job["status"] != "done":
-        flash("Results not available.", "error")
-        return redirect(url_for("index"))
-
-    transactions = job["result"]
-    meta = job["metadata"]
-    _record_raw_items(transactions)
+@app.get("/wrapped/<share_id>")
+def wrapped(share_id):
+    result = _load_result(share_id)
+    transactions = result["transactions"]
+    meta = result["metadata"]
     all_items = _aggregate_items(transactions)
     top_items = all_items[:3]
     total_qty = sum(i["qty"] for i in all_items)
@@ -231,18 +320,8 @@ def wrapped(job_id):
     tacos_qty,   tacos_spend   = _location_stats(transactions, ("taco",))
     drjacks_qty, drjacks_spend = _location_stats(transactions, ("dr jack", "dr. jack", "drjack"))
 
-    # ── Persist & compare ────────────────────────────────────
+    # ── Compare against every finished run ──────────────────
     stats = _load_stats()
-    stats["total_runs"] += 1
-    stats["all_total_qtys"].append(total_qty)
-    stats.setdefault("all_total_spends", []).append(total_spend)
-    stats["all_unique_items"].append(unique_items)
-    top_name = top_items[0]["name"] if top_items else None
-    if top_name:
-        stats["top_items"][top_name] = stats["top_items"].get(top_name, 0) + 1
-    _save_stats(stats)
-
-    # Percentile among all runs (including this one)
     qtys   = stats["all_total_qtys"]
     spends = stats.get("all_total_spends", [])
     pct_rank       = round(len([q for q in qtys if q < total_qty]) / len(qtys) * 100) if qtys else None
@@ -263,6 +342,7 @@ def wrapped(job_id):
         "wrapped.html",
         items=top_items,
         metadata=meta,
+        student_name=meta.get("name"),
         total_qty=total_qty,
         total_spend=total_spend,
         unique_items=unique_items,
@@ -273,6 +353,7 @@ def wrapped(job_id):
         tacos_spend=tacos_spend,
         drjacks_qty=drjacks_qty,
         drjacks_spend=drjacks_spend,
+        times=time_insights(transactions, meta["startdate"], meta["enddate"]),
         total_runs=stats["total_runs"],
         pct_rank=pct_rank,
         avg_qty=avg_qty,
@@ -280,25 +361,18 @@ def wrapped(job_id):
         total_all_spend=total_all_spend,
         most_common_top=most_common_top,
         semester_label=semester_label,
-        dashboard_url=url_for("results", job_id=job_id),
+        dashboard_url=url_for("results", share_id=share_id),
     )
 
 
-@app.get("/api/results/<job_id>")
-def api_results(job_id):
-    job = get_job(job_id)
-    if not job or job["status"] != "done":
-        return jsonify({"error": "not found"}), 404
-    return jsonify({"transactions": job["result"], "metadata": job["metadata"]})
+@app.get("/api/results/<share_id>")
+def api_results(share_id):
+    return jsonify(_load_result(share_id))
 
 
-@app.get("/download/<job_id>/csv")
-def download_csv(job_id):
-    job = get_job(job_id)
-    if not job or job["status"] != "done":
-        return "Not found", 404
-
-    items = _aggregate_items(job["result"])
+@app.get("/download/<share_id>/csv")
+def download_csv(share_id):
+    items = _aggregate_items(_load_result(share_id)["transactions"])
     lines = ["rank,item,qty,total_spend"]
     for item in items:
         safe = item["name"].replace('"', '""')
@@ -309,69 +383,6 @@ def download_csv(job_id):
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=stu_wrapped.csv"},
     )
-
-
-@app.post("/api/credentials")
-def api_credentials():
-    """Receive credentials from Cloudflare Email Worker."""
-    print(f"[api] /api/credentials endpoint hit", flush=True)
-
-    secret = os.environ.get("CREDENTIAL_SECRET", "")
-    provided_secret = request.headers.get("X-Credential-Secret", "")
-    print(f"[api] Secret check: env_secret={'set' if secret else 'NOT SET'}, provided={'set' if provided_secret else 'NOT SET'}", flush=True)
-
-    if secret and provided_secret != secret:
-        print(f"[api] ERROR: Secret mismatch!", flush=True)
-        return jsonify({"error": "unauthorized"}), 401
-
-    data = request.get_json()
-    print(f"[api] Request JSON: {data}", flush=True)
-
-    if not data or "job_id" not in data or "username" not in data or "password" not in data:
-        print(f"[api] ERROR: Missing fields in request", flush=True)
-        return jsonify({"error": "missing fields"}), 400
-
-    job_id = data["job_id"]
-    username = data["username"]
-    password = data["password"]
-    name = data.get("name")
-
-    print(f"[api] Extracted: job_id={job_id}, username={username}, name={name}", flush=True)
-
-    # Store in memory
-    try:
-        set_credentials(job_id, username, password, name)
-        print(f"[api] Stored credentials in memory", flush=True)
-    except Exception as e:
-        print(f"[api] ERROR storing in memory: {e}", flush=True)
-
-    # Also save to file
-    try:
-        print(f"[api] CREDENTIALS_DIR: {CREDENTIALS_DIR}", flush=True)
-        print(f"[api] Directory exists: {os.path.exists(CREDENTIALS_DIR)}", flush=True)
-
-        cred_file = os.path.join(CREDENTIALS_DIR, f"{job_id}.json")
-        print(f"[api] Writing to: {cred_file}", flush=True)
-
-        with open(cred_file, "w") as f:
-            json.dump({
-                "job_id": job_id,
-                "username": username,
-                "password": password,
-                "name": name,
-                "received_at": datetime.now().isoformat(),
-            }, f)
-
-        print(f"[api] File written successfully", flush=True)
-        print(f"[api] File exists after write: {os.path.exists(cred_file)}", flush=True)
-
-    except Exception as e:
-        print(f"[api] ERROR writing to file: {e}", flush=True)
-        import traceback
-        print(f"[api] Traceback: {traceback.format_exc()}", flush=True)
-
-    print(f"[api] SUCCESS: Received credentials for job={job_id} name={name or 'unknown'}", flush=True)
-    return jsonify({"success": True}), 200
 
 
 if __name__ == "__main__":

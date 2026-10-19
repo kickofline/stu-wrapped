@@ -1,93 +1,86 @@
-import sys
-import time
-import traceback
-from datetime import datetime
-from urllib.parse import urlparse, parse_qs, urlencode
+"""Flex Bucks (Atrium) transaction scraper — plain HTTP, no browser.
 
+Atrium's guest login is an ordinary form post: GET the login page to get a
+session key (skey, also the jsa_session cookie), POST the guest email/password
+with that skey, and the skey becomes an authenticated session. Statement pages
+then take the skey as a query parameter. Session keys are bound to the client
+IP (see ben.page/wrapped), so the login and statement requests must come from
+the same machine — they do, both run here.
+"""
+from urllib.parse import parse_qs, urlencode, urlparse
+
+import requests
 from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright, TimeoutError as PWTimeoutError
-
-
-def _log(*args):
-    print(*args, flush=True, file=sys.stdout)
 
 LOGIN_URL = "https://studentlink.atriumcampus.com/login.php?guest=1&cid=410"
 STATEMENT_BASE = "https://connectobu.atriumcampus.com/statementdetail.php"
 CID = "410"
-CREDENTIAL_TIMEOUT = 300  # 5 minutes
+TIMEOUT = 30  # seconds per request
+USER_AGENT = "Mozilla/5.0 (compatible; OBU-Stu-Wrapped/2.0; +https://wrapped.drew.place)"
 
 
-def wait_for_credentials(job_id, progress_callback):
-    """
-    Wait for credentials to be POSTed from Cloudflare Email Worker.
-    Checks file storage first, then polls every 2 seconds for up to CREDENTIAL_TIMEOUT seconds.
-    Returns (username, password) on success, raises TimeoutError otherwise.
-    """
-    import json
-    import os
-    from jobs import get_credentials
-
-    credentials_dir = os.path.join(os.path.dirname(__file__), "data", "credentials")
-    cred_file = os.path.join(credentials_dir, f"{job_id}.json")
-
-    # Check if credentials file exists
-    if os.path.exists(cred_file):
-        _log(f"[scraper] Found credentials file for job {job_id}")
-        try:
-            with open(cred_file, "r") as f:
-                creds = json.load(f)
-                return creds["username"], creds["password"]
-        except Exception as e:
-            _log(f"[scraper] Error reading credentials file: {e}")
-
-    start_time = time.time()
-    poll_count = 0
-
-    while True:
-        elapsed = int(time.time() - start_time)
-        if elapsed >= CREDENTIAL_TIMEOUT:
-            raise TimeoutError(
-                f"Didn't receive Flex Bucks access email after {CREDENTIAL_TIMEOUT // 60} minutes. "
-                "Make sure you added the correct email in step 2 and try again."
-            )
-
-        mins, secs = divmod(elapsed, 60)
-        time_str = f"{mins}m {secs:02d}s" if mins else f"{secs}s"
-        step = 2 if poll_count < 5 else 3
-        progress_callback(step, f"Waiting for Flex Bucks access... ({time_str} elapsed)")
-
-        # Check memory first
-        creds = get_credentials(job_id)
-        if creds:
-            _log(f"[scraper] Got credentials from memory for job {job_id}")
-            return creds["username"], creds["password"]
-
-        # Check file
-        if os.path.exists(cred_file):
-            _log(f"[scraper] Found credentials file for job {job_id}")
-            try:
-                with open(cred_file, "r") as f:
-                    creds = json.load(f)
-                    return creds["username"], creds["password"]
-            except Exception as e:
-                _log(f"[scraper] Error reading credentials file: {e}")
-
-        poll_count += 1
-        time.sleep(2)
+class LoginFailed(Exception):
+    """Atrium rejected the guest email/password."""
 
 
-def extract_skey(url):
-    parsed = urlparse(url)
-    params = parse_qs(parsed.query)
-    skey_list = params.get("skey", [])
-    if not skey_list or not skey_list[0]:
-        raise RuntimeError(f"skey not found in URL: {url}")
-    return skey_list[0]
+def _skey_from_url(url: str) -> str | None:
+    values = parse_qs(urlparse(url).query).get("skey", [])
+    return values[0] if values and values[0] else None
+
+
+def _login_form(html: str):
+    return BeautifulSoup(html, "lxml").find("input", attrs={"name": "loginphrase"})
+
+
+def login(session: requests.Session, username: str, password: str) -> str:
+    """Log in as a Flex Bucks guest and return the authenticated skey."""
+    page = session.get(LOGIN_URL, timeout=TIMEOUT)
+    page.raise_for_status()
+    soup = BeautifulSoup(page.text, "lxml")
+    field = soup.find("input", attrs={"name": "loginphrase"})
+    form = field.find_parent("form") if field else None
+    if form is None:
+        raise RuntimeError("Atrium login page changed: no login form found")
+
+    fields = {i["name"]: i.get("value", "") for i in form.find_all("input") if i.get("name")}
+    fields["loginphrase"] = username
+    fields["password"] = password
+    # The form is multipart/form-data; files=(None, value) sends plain fields that way.
+    resp = session.post(
+        form.get("action") or page.url,
+        files={k: (None, v) for k, v in fields.items()},
+        timeout=TIMEOUT,
+    )
+    resp.raise_for_status()
+    if _login_form(resp.text) is not None:
+        raise LoginFailed("Atrium did not accept the guest login")
+
+    skey = _skey_from_url(resp.url) or fields.get("skey")
+    if not skey:
+        raise RuntimeError("Atrium login succeeded but no session key was found")
+    return skey
 
 
 def build_statement_url(skey, startdate, enddate, acct="1"):
     params = {"cid": CID, "skey": skey, "startdate": startdate, "enddate": enddate, "acct": acct}
     return f"{STATEMENT_BASE}?{urlencode(params)}"
+
+
+def fetch_transactions(username, password, startdate, enddate, acct="1", progress=lambda step, msg: None):
+    """Log in and return parsed transactions between startdate and enddate (ISO dates)."""
+    with requests.Session() as session:
+        session.headers["User-Agent"] = USER_AGENT
+        progress(2, "Logging in to Flex Bucks...")
+        skey = login(session, username, password)
+
+        progress(3, "Loading your transaction history...")
+        resp = session.get(build_statement_url(skey, startdate, enddate, acct), timeout=TIMEOUT)
+        resp.raise_for_status()
+        if _login_form(resp.text) is not None:
+            raise RuntimeError("Atrium sent the statement request back to the login page")
+
+    progress(4, "Parsing your food data...")
+    return parse_transactions(resp.text)
 
 
 def _safe_float(td):
@@ -200,112 +193,3 @@ def parse_transactions(html):
             })
 
     return transactions
-
-
-def run_scrape_job_with_skey(job_id, startdate, enddate, skey, acct="1", login_url=None):
-    from jobs import update_job_progress, complete_job, fail_job
-    browser = None
-    try:
-        _log(f"[scraper] job={job_id} start={startdate} end={enddate}")
-        with sync_playwright() as p:
-            update_job_progress(job_id, 1, "Launching browser...")
-            _log(f"[scraper] launching chromium")
-            browser = p.chromium.launch(headless=True, slow_mo=0)
-            page = browser.new_context().new_page()
-
-            # Visit the user's original URL first so Atrium can set session cookies
-            if login_url:
-                _log(f"[scraper] establishing session via login_url")
-                page.goto(login_url, wait_until="networkidle")
-                _log(f"[scraper] session page loaded, url={page.url}")
-
-            update_job_progress(job_id, 2, "Loading your transaction history...")
-            statement_url = build_statement_url(skey, startdate, enddate, acct)
-            _log(f"[scraper] navigating to statement URL")
-            page.goto(statement_url, wait_until="networkidle")
-            _log(f"[scraper] page loaded, final url: {page.url}")
-            update_job_progress(job_id, 3, "Expanding transaction details...")
-            try:
-                page.eval_on_selector_all("details", "els => els.forEach(e => e.open = true)")
-                page.wait_for_timeout(500)
-            except Exception:
-                pass
-            update_job_progress(job_id, 4, "Parsing your food data...")
-            html = page.content()
-            _log(f"[scraper] page html length: {len(html)}")
-            if len(html) < 500:
-                _log(f"[scraper] short response body: {html!r}")
-            transactions = parse_transactions(html)
-            _log(f"[scraper] parsed {len(transactions)} transactions")
-            browser.close()
-            browser = None
-        update_job_progress(job_id, 5, "Finishing up...")
-        metadata = {
-            "generated_at": datetime.now().isoformat(timespec="seconds"),
-            "startdate": startdate, "enddate": enddate, "cid": CID, "acct": acct,
-        }
-        complete_job(job_id, transactions, metadata)
-        _log(f"[scraper] job={job_id} complete, {len(transactions)} transactions")
-    except Exception as exc:
-        if browser is not None:
-            try:
-                browser.close()
-            except Exception:
-                pass
-        _log(f"[scraper] job={job_id} FAILED: {exc}")
-        _log(traceback.format_exc())
-        fail_job(job_id, str(exc))
-
-
-def run_scrape_job(job_id, startdate, enddate, plus_address, acct="1"):
-    from jobs import update_job_progress, complete_job, fail_job
-    browser = None
-    try:
-        update_job_progress(job_id, 1, "Connecting to your Flex Bucks account...")
-
-        def _progress(step, msg):
-            update_job_progress(job_id, step, msg)
-
-        username, password = wait_for_credentials(job_id, _progress)
-        update_job_progress(job_id, 5, "Launching browser...")
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, slow_mo=0)
-            page = browser.new_context().new_page()
-            update_job_progress(job_id, 6, "Logging in to Atrium...")
-            page.goto(LOGIN_URL, wait_until="domcontentloaded")
-            page.fill("#loginphrase", username)
-            page.fill("input[type='password']", password)
-            page.click("input[type='submit'].jsa_submit-form")
-            try:
-                page.wait_for_load_state("networkidle", timeout=60000)
-            except PWTimeoutError:
-                page.wait_for_load_state("domcontentloaded", timeout=30000)
-            redirected_url = page.url
-            if "skey=" not in redirected_url:
-                raise RuntimeError("Login failed — check the credentials in the email.")
-            skey = extract_skey(redirected_url)
-            update_job_progress(job_id, 8, "Loading your transaction history...")
-            page.goto(build_statement_url(skey, startdate, enddate, acct), wait_until="networkidle")
-            update_job_progress(job_id, 9, "Expanding transaction details...")
-            try:
-                page.eval_on_selector_all("details", "els => els.forEach(e => e.open = true)")
-                page.wait_for_timeout(500)
-            except Exception:
-                pass
-            update_job_progress(job_id, 10, "Parsing your food data...")
-            html = page.content()
-            transactions = parse_transactions(html)
-            browser.close()
-            browser = None
-        metadata = {
-            "generated_at": datetime.now().isoformat(timespec="seconds"),
-            "startdate": startdate, "enddate": enddate, "cid": CID, "acct": acct,
-        }
-        complete_job(job_id, transactions, metadata)
-    except Exception as exc:
-        if browser is not None:
-            try:
-                browser.close()
-            except Exception:
-                pass
-        fail_job(job_id, str(exc))

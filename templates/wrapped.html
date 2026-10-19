@@ -1,49 +1,40 @@
 {% extends "base.html" %}
-{% block title %}Your OBU Stu Wrapped{% endblock %}
+{% block title %}{% if student_name %}{{ student_name }}'s{% else %}Your{% endif %} OBU Stu Wrapped{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/wrapped.css') }}">
 {% endblock %}
 
 {% block content %}
 
-{# Count all slides that will render #}
-{% set total_slides = 4
-   + items | length
-   + (1 if cfa_qty > 0 else 0)
-   + (1 if tacos_qty > 0 else 0)
-   + (1 if drjacks_qty > 0 else 0)
-   + (1 if total_runs >= 2 else 0)
-%}
-
 <div class="wrapped-container">
 
   <!-- Dashboard shortcut (always visible) -->
   <a href="{{ dashboard_url }}" class="wrapped-dash-btn">Dashboard ↗</a>
 
-  <!-- Dot navigation -->
-  <div class="nav-dots" id="nav-dots">
-    {% for i in range(total_slides) %}
-    <button class="nav-dot{% if i == 0 %} active{% endif %}"
-            data-index="{{ i }}" aria-label="Slide {{ i + 1 }}"></button>
-    {% endfor %}
-  </div>
+  <!-- Dot navigation (filled in by wrapped.js, one per slide) -->
+  <div class="nav-dots" id="nav-dots"></div>
 
-  <!-- ── 0: Intro ──────────────────────────────────────────── -->
-  <div class="slide slide-intro active" data-index="0">
+  <!-- ── Intro ─────────────────────────────────────────────── -->
+  <div class="slide slide-intro active">
+    {% if student_name %}<p class="intro-name">{{ student_name }}'s</p>{% endif %}
     <p class="intro-eyebrow">{{ semester_label }}</p>
-    <h1 class="intro-title">Your OBU Stu<br>Wrapped</h1>
+    <h1 class="intro-title">OBU Stu<br>Wrapped</h1>
     <p class="intro-hint">Tap · swipe · or press →</p>
+    <div class="outro-links">
+      <button class="btn-secondary js-share">Share 🔗</button>
+      <a href="{{ url_for('index') }}" class="btn-secondary">Get your own</a>
+    </div>
   </div>
 
-  <!-- ── 1: Money Spent ────────────────────────────────────── -->
-  <div class="slide slide-spend" data-index="1">
+  <!-- ── Money Spent ───────────────────────────────────────── -->
+  <div class="slide slide-spend">
     <p class="stats-label">This semester you spent</p>
     <p class="stats-big spend-big">${{ "%.2f"|format(total_spend) }}</p>
     <p class="stats-label">on campus dining</p>
   </div>
 
-  <!-- ── 2: Total + weekly rate ────────────────────────────── -->
-  <div class="slide slide-stats" data-index="2">
+  <!-- ── Total + weekly rate ───────────────────────────────── -->
+  <div class="slide slide-stats">
     <p class="stats-label">You ordered</p>
     <p class="stats-big">{{ total_qty }}</p>
     <p class="stats-label">items this semester</p>
@@ -51,8 +42,8 @@
     <p class="stats-sub">That's <strong>{{ items_per_week }}</strong> items every week</p>
   </div>
 
-  <!-- ── 3: Variety ───────────────────────────────────────── -->
-  <div class="slide slide-variety" data-index="3">
+  <!-- ── Variety ──────────────────────────────────────────── -->
+  <div class="slide slide-variety">
     <p class="variety-pre">You tried</p>
     <p class="stats-big variety-num">{{ unique_items }}</p>
     <p class="variety-post">unique dishes</p>
@@ -65,10 +56,10 @@
     {% endif %}
   </div>
 
-  <!-- ── 4…N+3: Top items ──────────────────────────────────── -->
+  <!-- ── Top items ─────────────────────────────────────────── -->
   {% set colors = ["#c1121f","#1d3557","#2a9d8f","#7b2d8b","#e76f51","#264653","#0096c7","#6d6875","#b5838d","#588157"] %}
   {% for item in items %}
-  <div class="slide slide-item" data-index="{{ loop.index + 3 }}"
+  <div class="slide slide-item"
        style="--slide-color: {{ colors[(loop.index0) % colors|length] }};">
     <span class="rank-number">#{{ item.rank }}</span>
     <h2 class="item-name">{{ item.name }}</h2>
@@ -86,10 +77,57 @@
   </div>
   {% endfor %}
 
+  {% if times %}
+  <!-- ── Favorite spots by meal ────────────────────────────── -->
+  <div class="slide slide-spots">
+    <h2 class="chart-title">Your favorite spots</h2>
+    {% for group in times.spots %}
+    <section class="chart-group">
+      <h3 class="chart-group-title">{{ group.meal }}</h3>
+      {% set top_count = group.top[0].count %}
+      {% for spot in group.top %}
+      <div class="bar-row">
+        <span class="bar-label">{{ spot.location }}</span>
+        <span class="bar" style="--w: {{ (spot.count / top_count * 100) | round(1) }}%"></span>
+        <span class="bar-value">{{ spot.count }}</span>
+      </div>
+      {% endfor %}
+    </section>
+    {% endfor %}
+  </div>
+
+  <!-- ── Earliest / latest ─────────────────────────────────── -->
+  <div class="slide slide-clock">
+    <div class="clock-half clock-early">
+      <p class="cfa-logo">🐛</p>
+      <p class="clock-label">Your earliest bite</p>
+      <p class="clock-time">{{ times.earliest.time }} at {{ times.earliest.location }}</p>
+      <p class="clock-date">{{ times.earliest.date }}</p>
+    </div>
+    <div class="clock-half clock-late">
+      <p class="cfa-logo">🦉</p>
+      <p class="clock-label">Your latest bite</p>
+      <p class="clock-time">{{ times.latest.time }} at {{ times.latest.location }}</p>
+      <p class="clock-date">{{ times.latest.date }}</p>
+    </div>
+  </div>
+
+  <!-- ── Purchases per weekday ─────────────────────────────── -->
+  <div class="slide slide-weekdays">
+    <h2 class="chart-title">Average visits per day</h2>
+    {% for w in times.weekdays %}
+    <div class="bar-row">
+      <span class="bar-label">{{ w.day }}</span>
+      <span class="bar" style="--w: {{ (w.avg / times.max_weekday_avg * 100) | round(1) }}%"></span>
+      <span class="bar-value">{{ w.avg }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <!-- ── CFA slide (conditional) ──────────────────────────── -->
   {% if cfa_qty > 0 %}
-  {% set cfa_index = items | length + 4 %}
-  <div class="slide slide-cfa" data-index="{{ cfa_index }}">
+  <div class="slide slide-cfa">
     <p class="cfa-logo">🐔</p>
     <h2 class="cfa-title">Chick-fil-A<br>stan</h2>
     <p class="cfa-stat">{{ cfa_qty }} items · ${{ "%.2f"|format(cfa_spend) }} spent</p>
@@ -105,8 +143,7 @@
 
   <!-- ── Tacos for Life slide (conditional) ───────────────── -->
   {% if tacos_qty > 0 %}
-  {% set tacos_index = items | length + 4 + (1 if cfa_qty > 0 else 0) %}
-  <div class="slide slide-tacos" data-index="{{ tacos_index }}">
+  <div class="slide slide-tacos">
     <p class="cfa-logo">🌮</p>
     <h2 class="cfa-title">Tacos for<br>Life fan</h2>
     <p class="cfa-stat">{{ tacos_qty }} items · ${{ "%.2f"|format(tacos_spend) }} spent</p>
@@ -122,8 +159,7 @@
 
   <!-- ── Dr. Jack's slide (conditional) ──────────────────── -->
   {% if drjacks_qty > 0 %}
-  {% set drjacks_index = items | length + 4 + (1 if cfa_qty > 0 else 0) + (1 if tacos_qty > 0 else 0) %}
-  <div class="slide slide-drjacks" data-index="{{ drjacks_index }}">
+  <div class="slide slide-drjacks">
     <p class="cfa-logo">☕</p>
     <h2 class="cfa-title">Dr. Jack's<br>regular</h2>
     <p class="cfa-stat">{{ drjacks_qty }} items · ${{ "%.2f"|format(drjacks_spend) }} spent</p>
@@ -139,8 +175,7 @@
 
   <!-- ── Comparison slide (conditional, needs ≥2 users) ────── -->
   {% if total_runs >= 2 %}
-  {% set cmp_index = total_slides - 2 %}
-  <div class="slide slide-compare" data-index="{{ cmp_index }}">
+  <div class="slide slide-compare">
     <p class="stats-label">vs. other OBU students</p>
     {% if pct_rank is not none %}
       <p class="stats-big">{{ pct_rank }}<span class="pct-sup">%</span></p>
@@ -172,11 +207,13 @@
   {% endif %}
 
   <!-- ── Outro ─────────────────────────────────────────────── -->
-  <div class="slide slide-outro" data-index="{{ total_slides - 1 }}">
+  <div class="slide slide-outro">
     <h2 class="outro-title">That's your<br>OBU Stu Wrapped!</h2>
     <p class="outro-sub">See you next semester.</p>
     <div class="outro-links">
       <button class="btn-primary" id="save-img-btn">Save Image 📸</button>
+      <button class="btn-secondary js-share">Share 🔗</button>
+      <a href="{{ url_for('index') }}" class="btn-secondary">Get your own</a>
       <a href="{{ dashboard_url }}" class="btn-secondary">Dashboard ↗</a>
     </div>
   </div>
@@ -185,7 +222,7 @@
 
 <!-- ── Share card (off-screen, captured by html2canvas) ─── -->
 <div id="share-card">
-  <div class="sc-eyebrow">{{ semester_label }}</div>
+  <div class="sc-eyebrow">{% if student_name %}{{ student_name }} · {% endif %}{{ semester_label }}</div>
   <div class="sc-title-wrap">
     <span class="sc-title-top">OBU Stu</span>
     <span class="sc-title-bot">Wrapped</span>
@@ -199,7 +236,7 @@
     </div>
     {% endfor %}
   </div>
-  <div class="sc-footer">obu.edu · dining</div>
+  <div class="sc-footer">get yours @ wrapped.drew.place</div>
 </div>
 
 {% endblock %}

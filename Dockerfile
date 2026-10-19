@@ -3,7 +3,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system packages needed by Playwright's Chromium and uv
+# curl + certificates to install uv
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates && rm -rf /var/lib/apt/lists/*
 
@@ -16,9 +16,6 @@ COPY pyproject.toml uv.lock* ./
 
 # Install Python packages with uv
 RUN /root/.local/bin/uv sync --frozen --no-dev
-
-# Install Playwright's Chromium browser and its OS dependencies
-RUN /root/.local/bin/uv run playwright install chromium --with-deps
 
 # Copy application source
 COPY . .

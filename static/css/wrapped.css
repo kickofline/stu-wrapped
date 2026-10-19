@@ -291,6 +291,78 @@ body:has(.wrapped-container) .top-nav { display: none; }
 
 .compare-sub strong { color: rgba(255,255,255,.75); }
 
+/* ── Intro name ────────────────────────────────────────────── */
+.intro-name {
+  font-size: clamp(1.1rem, 3.5vw, 1.8rem);
+  font-weight: 700;
+  color: #ffd166;
+}
+
+/* ── Bar charts (favorite spots, weekdays) ─────────────────── */
+.slide-spots    { background: linear-gradient(160deg, #e85d04 0%, #9d0208 100%); gap: .9rem; }
+.slide-weekdays { background: linear-gradient(160deg, #9d0208 0%, #370617 100%); gap: .6rem; }
+
+.chart-title {
+  font-size: clamp(1.4rem, 5vw, 2.6rem);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  color: #fff;
+  text-align: center;
+}
+
+.chart-group {
+  width: min(560px, 100%);
+  border: 2px solid rgba(255,255,255,.85);
+  padding: .6rem .9rem;
+}
+
+.chart-group-title {
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: #fff;
+  margin-bottom: .3rem;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(6rem, 38%) 1fr auto;
+  align-items: center;
+  gap: .6rem;
+  width: min(560px, 100%);
+  font-size: clamp(.8rem, 2.2vw, 1rem);
+  font-weight: 700;
+  color: #fff;
+}
+
+.bar-label { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar { display: block; height: 1.1rem; width: var(--w); min-width: 3px; background: #fff; }
+.slide.active .bar { animation: barGrow .7s cubic-bezier(.34, 1.2, .64, 1) .2s both; }
+@keyframes barGrow { from { width: 0; } }
+
+/* ── Earliest / latest ─────────────────────────────────────── */
+.slide-clock { padding: 0; }
+
+.clock-half {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  text-align: center;
+  padding: 1.5rem;
+}
+
+.clock-early { background: #861a40; color: #ffc8dd; }
+.clock-late  { background: #1e3a8a; color: #fef3c7; }
+.clock-label { font-size: clamp(1rem, 3vw, 1.5rem); font-weight: 800; text-transform: uppercase; }
+.clock-time  { font-size: clamp(1.4rem, 5vw, 2.5rem); font-weight: 800; }
+.clock-date  { font-size: clamp(.9rem, 2.5vw, 1.2rem); font-weight: 600; opacity: .85; }
+
 /* ── Outro ─────────────────────────────────────────────────── */
 .slide-outro {
   background: radial-gradient(ellipse at 70% 60%, #1a1a2e 0%, #0a0a0a 70%);

@@ -1,28 +1,35 @@
+"""In-memory job tracking.
+
+Gunicorn runs a single worker, so this module-level dict is shared by every
+request. A job starts "waiting" for its inbox's credentials, is claimed
+("running") exactly once by whichever side has them first — /start when they
+are already stored, /api/inbound when the invite arrives — then ends "done"
+(with a share_id) or "error".
+"""
+import secrets
 import threading
-import uuid
 from datetime import datetime, timedelta
 
-JOBS: dict = {}
-CREDENTIALS: dict = {}  # job_id -> {username, password}
+TOTAL_STEPS = 5
+WAITING_MESSAGE = "Waiting for your Flex Bucks invite email..."
+
+JOBS: dict[str, dict] = {}
 _lock = threading.Lock()
 
-def create_job(total_steps: int = 10, plus_address: str = None, job_id: str = None) -> str:
-    """Create a new job. Returns job_id."""
-    if job_id is None:
-        job_id = str(uuid.uuid4())
+
+def create_job(tag: str) -> str:
+    job_id = secrets.token_urlsafe(9)
     with _lock:
         JOBS[job_id] = {
             "job_id": job_id,
-            "status": "pending",
+            "tag": tag,
+            "status": "waiting",
             "step": 0,
-            "total_steps": total_steps,
-            "message": "Queued...",
+            "total_steps": TOTAL_STEPS,
+            "message": WAITING_MESSAGE,
             "error": None,
-            "result": None,
-            "metadata": None,
-            "plus_address": plus_address,
-            "created_at": datetime.now().isoformat(),
-            "completed_at": None,
+            "share_id": None,
+            "created_at": datetime.now(),
         }
     return job_id
 
@@ -31,62 +38,65 @@ def get_job(job_id: str) -> dict | None:
     return JOBS.get(job_id)
 
 
-def set_job_plus_address(job_id: str, plus_address: str) -> None:
+def active_job_for(tag: str) -> dict | None:
     with _lock:
-        if job_id in JOBS:
-            JOBS[job_id]["plus_address"] = plus_address
+        for job in JOBS.values():
+            if job["tag"] == tag and job["status"] in ("waiting", "running"):
+                return job
+    return None
 
 
-def update_job_progress(job_id: str, step: int, message: str) -> None:
+def _mark_running(job: dict) -> None:
+    job["status"] = "running"
+    job["message"] = "Got your Flex Bucks invite!"
+
+
+def claim(job_id: str) -> bool:
+    """Move a waiting job to running. False if someone else already did."""
+    with _lock:
+        job = JOBS.get(job_id)
+        if not job or job["status"] != "waiting":
+            return False
+        _mark_running(job)
+        return True
+
+
+def claim_waiting(tag: str) -> list[str]:
+    """Move every waiting job for this inbox to running; return their ids."""
+    with _lock:
+        claimed = [j for j in JOBS.values() if j["tag"] == tag and j["status"] == "waiting"]
+        for job in claimed:
+            _mark_running(job)
+        return [j["job_id"] for j in claimed]
+
+
+def update_progress(job_id: str, step: int, message: str) -> None:
     with _lock:
         if job_id in JOBS:
             JOBS[job_id]["step"] = step
             JOBS[job_id]["message"] = message
-            JOBS[job_id]["status"] = "running"
 
 
-def complete_job(job_id: str, result: dict, metadata: dict) -> None:
+def finish(job_id: str, share_id: str) -> None:
     with _lock:
         if job_id in JOBS:
-            JOBS[job_id]["status"] = "done"
-            JOBS[job_id]["step"] = JOBS[job_id]["total_steps"]
-            JOBS[job_id]["message"] = "Complete!"
-            JOBS[job_id]["result"] = result
-            JOBS[job_id]["metadata"] = metadata
-            JOBS[job_id]["completed_at"] = datetime.now().isoformat()
+            job = JOBS[job_id]
+            job["status"] = "done"
+            job["step"] = job["total_steps"]
+            job["message"] = "Complete!"
+            job["share_id"] = share_id
 
 
-def fail_job(job_id: str, error_message: str) -> None:
+def fail(job_id: str, error_message: str) -> None:
     with _lock:
         if job_id in JOBS:
             JOBS[job_id]["status"] = "error"
-            JOBS[job_id]["message"] = f"Error: {error_message}"
+            JOBS[job_id]["message"] = error_message
             JOBS[job_id]["error"] = error_message
-
-
-def set_credentials(job_id: str, username: str, password: str, name: str = None) -> None:
-    """Store credentials from Cloudflare Worker."""
-    with _lock:
-        CREDENTIALS[job_id] = {
-            "username": username,
-            "password": password,
-            "name": name,
-            "received_at": datetime.now().isoformat(),
-        }
-
-
-def get_credentials(job_id: str) -> dict | None:
-    """Retrieve credentials for a job."""
-    return CREDENTIALS.get(job_id)
 
 
 def cleanup_old_jobs(max_age_hours: int = 2) -> None:
     cutoff = datetime.now() - timedelta(hours=max_age_hours)
     with _lock:
-        to_delete = [
-            jid for jid, job in JOBS.items()
-            if datetime.fromisoformat(job["created_at"]) < cutoff
-        ]
-        for jid in to_delete:
-            del JOBS[jid]
-            CREDENTIALS.pop(jid, None)  # Clean up credentials too
+        for job_id in [jid for jid, job in JOBS.items() if job["created_at"] < cutoff]:
+            del JOBS[job_id]

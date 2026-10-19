@@ -1,7 +1,14 @@
 /* Wrapped slideshow navigation */
 
 const slides = Array.from(document.querySelectorAll('.slide'));
-const dots   = Array.from(document.querySelectorAll('.nav-dot'));
+const dotsEl = document.getElementById('nav-dots');
+const dots   = slides.map((_, i) => {
+  const dot = document.createElement('button');
+  dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+  dot.setAttribute('aria-label', 'Slide ' + (i + 1));
+  dotsEl.appendChild(dot);
+  return dot;
+});
 let current  = 0;
 const total  = slides.length;
 
@@ -67,6 +74,23 @@ if (saveBtn) {
       .catch(() => { saveBtn.textContent = 'Save Image 📸'; saveBtn.disabled = false; });
   });
 }
+
+// Share link: native share sheet on phones, clipboard elsewhere
+document.querySelectorAll('.js-share').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const url = window.location.href;
+    if (navigator.share) {
+      navigator.share({ title: document.title, url }).catch(() => {});
+      return;
+    }
+    navigator.clipboard.writeText(url).then(() => {
+      const label = btn.textContent;
+      btn.textContent = 'Link copied!';
+      setTimeout(() => { btn.textContent = label; }, 2000);
+    });
+  });
+});
 
 // Touch / swipe
 let touchStartX = 0;

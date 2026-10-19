@@ -19,6 +19,13 @@
       Step <span id="step-num">{{ job.step }}</span> of {{ job.total_steps }}
     </p>
 
+    <!-- Shown while we wait for the Flex Bucks invite -->
+    <div class="waiting-hint" id="waiting-hint"{% if job.status != 'waiting' %} style="display:none"{% endif %}>
+      <p>Haven't added us yet? Add this guest email in Flex Bucks and keep this page open:</p>
+      <code class="plus-address-code">{{ plus_address }}</code>
+      <p><a href="https://connectobu.atriumcampus.com/guestaccess.php" target="_blank" rel="noopener">Open Flex Bucks ↗</a></p>
+    </div>
+
     <!-- Error box (hidden until error) -->
     <div class="error-box" id="error-box" style="display:none">
       <strong>Something went wrong</strong>

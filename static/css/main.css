@@ -324,29 +324,11 @@ a:hover { text-decoration: underline; }
   line-height: 1.5;
 }
 
-/* ── Email input ───────────────────────────────── */
-.email-input {
-  display: block;
-  width: 100%;
-  margin-top: .5rem;
-  padding: .55rem .75rem;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  font-size: 1rem;
-  font-family: var(--font);
-  outline: none;
-  box-sizing: border-box;
-  transition: border-color .2s;
-}
-.email-input:focus { border-color: var(--accent); }
 .email-hint {
   margin-top: .4rem;
   font-size: .78rem;
   color: #e63946;
 }
-label.step-desc { display: block; }
 
 /* ── Plus-address row wraps on narrow screens ── */
 .plus-address-row { flex-wrap: wrap; }
@@ -457,6 +439,15 @@ label.step-desc { display: block; }
 
 .waiting-step {
   font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 1.5rem;
+}
+
+.waiting-hint {
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+  font-size: .85rem;
   color: var(--muted);
   margin-bottom: 1.5rem;
 }
