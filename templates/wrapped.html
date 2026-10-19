@@ -320,13 +320,23 @@
     <section class="slide t-orange l2 outro" data-share="link"><div class="frame">
       {{ blobs() }}
       <div class="body center">
+        {% if viewer.owner %}
         <h2 class="display ac" style="--fs: 92">That's a<br>wrap{% if first_name %}, {{ first_name }}{% endif %}.</h2>
-        <p class="lead">See you next semester.</p>
+        <p class="lead">{% if viewer.versus_url %}Now see how you compare with {{ viewer.versus_name }}.{% else %}See you next semester.{% endif %}</p>
         <div class="outro-actions">
-          <button class="btn-primary js-share-link">Share my Wrapped</button>
+          {% if viewer.versus_url %}<a class="btn-primary cta-big" href="{{ viewer.versus_url }}">See you vs {{ viewer.versus_name }} →</a>{% endif %}
+          <button class="{{ 'btn-secondary' if viewer.versus_url else 'btn-primary' }} js-share-link">Share my Wrapped</button>
           <a class="btn-secondary" href="{{ dashboard_url }}">All my items</a>
           <a class="btn-secondary" href="{{ compare_url }}">Compare with a friend</a>
         </div>
+        {% else %}
+        {% set them = first_name or "them" %}
+        <h2 class="display ac" style="--fs: 110">Your<br>turn.</h2>
+        <p class="lead">{% if viewer.versus_url %}See how your semester stacks up against {{ them }}.{% else %}Get your own Wrapped, then see how you compare with {{ them }}.{% endif %}</p>
+        <div class="outro-actions">
+          <a class="btn-primary cta-big" href="{{ viewer.versus_url or viewer.get_own_url }}">{% if viewer.versus_url %}See you vs {{ them }} →{% else %}Get my own →{% endif %}</a>
+        </div>
+        {% endif %}
       </div>
       {{ foot() }}
     </div></section>

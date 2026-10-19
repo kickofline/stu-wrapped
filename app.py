@@ -40,6 +40,8 @@ OG_DIR         = os.path.join(DATA_DIR, "og")  # rendered link-preview images, o
 ARCHIVE_DIR    = os.path.join(DATA_DIR, "archive")  # every scrape, raw + parsed, kept forever
 
 INBOX_COOKIE = "inbox"
+MINE_COOKIE = "mine"  # share id of this browser's own latest Wrapped
+VS_COOKIE = "vs"      # share id of the friend whose Wrapped sent this browser here
 _SHARE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{12}$")
 _stats_lock = threading.Lock()
 
@@ -118,6 +120,36 @@ def _student_key(invite: dict, tag: str) -> str:
     the invite (same across browsers and re-invites), else the inbox tag."""
     name = " ".join((invite.get("name") or "").lower().split())
     return hashlib.sha256((name or f"inbox:{tag}").encode()).hexdigest()[:16]
+
+
+def _result_meta(share_id: str | None) -> dict | None:
+    """A saved Wrapped's metadata, or None for a malformed or unknown share id."""
+    if not share_id or not _SHARE_ID_RE.match(share_id):
+        return None
+    try:
+        with open(os.path.join(RESULTS_DIR, f"{share_id}.json"), encoding="utf-8") as f:
+            return json.load(f)["metadata"]
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def _same_student(a: dict, b: dict) -> bool:
+    """Same student behind two runs: student keys when both have one, otherwise the
+    normalized names (runs saved before keys were stored)."""
+    if a.get("student_key") and b.get("student_key"):
+        return a["student_key"] == b["student_key"]
+    name_a = " ".join((a.get("name") or "").casefold().split())
+    return bool(name_a) and name_a == " ".join((b.get("name") or "").casefold().split())
+
+
+def _first_name(meta: dict) -> str:
+    parts = (meta.get("name") or "").split()
+    return parts[0] if parts else "your friend"
+
+
+def _set_cookie(resp: Response, name: str, value: str, max_age: int = 365 * 24 * 3600) -> None:
+    resp.set_cookie(name, value, max_age=max_age, httponly=True, samesite="Lax",
+                    secure=request.is_secure or request.headers.get("X-Forwarded-Proto") == "https")
 
 
 def _record_raw_items(transactions: list) -> None:
@@ -355,9 +387,15 @@ def index():
     tag = request.cookies.get(INBOX_COOKIE)
     if not is_tag(tag):
         tag = new_tag()
-    resp = Response(render_template("index.html", inbox_address=inbox_address(tag), semester_label=_semester_dates()[2]))
-    resp.set_cookie(INBOX_COOKIE, tag, max_age=365 * 24 * 3600, httponly=True, samesite="Lax",
-                    secure=request.is_secure or request.headers.get("X-Forwarded-Proto") == "https")
+    vs_id = request.args.get("vs")
+    vs = _result_meta(vs_id)
+    resp = Response(render_template(
+        "index.html", inbox_address=inbox_address(tag), semester_label=_semester_dates()[2],
+        vs_name=_first_name(vs) if vs else None,
+    ))
+    _set_cookie(resp, INBOX_COOKIE, tag)
+    if vs:
+        _set_cookie(resp, VS_COOKIE, vs_id, max_age=30 * 24 * 3600)
     return resp
 
 
@@ -392,7 +430,7 @@ def status(job_id):
     if not job:
         return jsonify({"status": "error", "message": "That run expired. Hit Generate again."}), 404
 
-    return jsonify({
+    resp = jsonify({
         "status": job["status"],
         "step": job["step"],
         "total_steps": job["total_steps"],
@@ -400,6 +438,9 @@ def status(job_id):
         "redirect": url_for("wrapped", share_id=job["share_id"]) if job["status"] == "done" else None,
         "error": job["error"],
     })
+    if job["status"] == "done":
+        _set_cookie(resp, MINE_COOKIE, job["share_id"])
+    return resp
 
 
 @app.post("/api/inbound")
@@ -502,17 +543,45 @@ def _wrapped_context(share_id: str) -> dict:
     }
 
 
+def _viewer(share_id: str) -> dict:
+    """Whether the person viewing a Wrapped made it, and the comparison its outro offers."""
+    meta = _result_meta(share_id) or {}
+    tag = request.cookies.get(INBOX_COOKIE)
+    invite = load_credentials(tag) if is_tag(tag) else None
+    mine_id = request.cookies.get(MINE_COOKIE)
+    mine = _result_meta(mine_id)
+    owner = (mine_id == share_id
+             or (mine is not None and _same_student(mine, meta))
+             or (invite is not None and meta.get("student_key") == _student_key(invite, tag)))
+    if owner:
+        vs_id = request.cookies.get(VS_COOKIE)
+        vs = _result_meta(vs_id)
+        if vs is None or _same_student(vs, meta):
+            return {"owner": True}
+        return {"owner": True, "versus_name": _first_name(vs),
+                "versus_url": url_for("compare_results", left_id=share_id, right_id=vs_id)}
+    if mine is not None:
+        return {"owner": False, "versus_url": url_for("compare_results", left_id=mine_id, right_id=share_id)}
+    return {"owner": False, "get_own_url": url_for("index", vs=share_id)}
+
+
 @app.get("/wrapped/<share_id>")
 def wrapped(share_id):
     ctx = _wrapped_context(share_id)
-    return render_template(
+    viewer = _viewer(share_id)
+    resp = Response(render_template(
         "wrapped.html",
         **ctx,
+        viewer=viewer,
         dashboard_url=url_for("results", share_id=share_id),
         share_url=url_for("wrapped", share_id=share_id, _external=True, _scheme="https"),
         og_image=url_for("og_result", share_id=share_id, _external=True, _scheme="https"),
         compare_url=url_for("compare_start", share_id=share_id),
-    )
+    ))
+    if viewer["owner"] and request.cookies.get(MINE_COOKIE) != share_id:
+        # Owners who generated before this cookie existed: remember it for friends' links.
+        _set_cookie(resp, MINE_COOKIE, share_id)
+    return resp
 
 
 def _comparison_profile(share_id: str) -> dict:
@@ -537,7 +606,6 @@ def _comparison_profile(share_id: str) -> dict:
         "items": {item["name"]: item["qty"] for item in items},
         "usual": signature_order(transactions),
         "badges": dining_badges(transactions, result.get("swipes", []), metadata),
-        "_student_key": metadata.get("student_key"),
         "_caf_times": caf_times,
     }
 
@@ -574,11 +642,7 @@ def compare_results(left_id, right_id):
         return redirect(url_for("compare_start", share_id=left_id))
     left = _comparison_profile(left_id)
     right = _comparison_profile(right_id)
-    same_key = left["_student_key"] and left["_student_key"] == right["_student_key"]
-    left_name = " ".join(left["name"].casefold().split())
-    right_name = " ".join(right["name"].casefold().split())
-    same_legacy_name = (not left["_student_key"] or not right["_student_key"]) and left_name and left_name == right_name
-    if same_key or same_legacy_name:
+    if _same_student(_result_meta(left_id), _result_meta(right_id)):
         flash("Those links belong to the same student. Ask a friend for theirs!", "error")
         return redirect(url_for("compare_start", share_id=left_id))
     match = friend_match(left, right)

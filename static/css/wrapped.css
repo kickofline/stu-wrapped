@@ -1,33 +1,39 @@
-/* ── Viewer: full-screen slides with the share bar under them ──
-   Each slide fills the screen in its color; its content lives in a centered 9:16
-   .frame (the 1080x1920 share image). Everything in a frame is sized in
-   --u = 1/540 of the frame width, so a slide looks the same on any phone, on
-   desktop and in the export, and blobs bleed past the frame to the screen edges. */
+/* ── Viewer: full-screen slides with the share bar over them ──
+   Each slide fills the whole screen in its color, under the share bar and the
+   safe areas, so a transition only ever blends slide colors. Its content lives in
+   a 9:16 .frame (the 1080x1920 share image), centered in the room above the bar.
+   Everything in a frame is sized in --u = 1/540 of the frame width, so a slide
+   looks the same on any phone, on desktop and in the export, and blobs bleed past
+   the frame to the screen edges. */
 html:has(.viewer), body:has(.viewer) { height: 100%; overflow: hidden; overscroll-behavior: none; }
 body:has(.viewer) { transition: background-color .5s ease; }
 
 .viewer {
+  --bar: 60px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  position: relative;
   height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
   -webkit-user-select: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
 .stage {
-  position: relative;
-  flex: 1;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
   container-type: size;
   overflow: hidden;
   touch-action: pan-y;
 }
-.stage > * { --u: min(100cqw / 540, 100cqh / 960); }
+.stage > * {
+  --room: calc(100cqh - var(--safe-top) - var(--bar) - var(--safe-bottom));
+  --mid: calc(var(--safe-top) + var(--room) / 2);
+  --u: min(100cqw / 540, var(--room) / 960);
+}
 
 /* ── Story progress bars (aligned to the frame) ────────────── */
-.progress { position: absolute; z-index: 5; top: calc(50% - 480 * var(--u) + 16 * var(--u)); left: calc(50% - 252 * var(--u)); width: calc(504 * var(--u)); display: flex; gap: 4px; pointer-events: none; }
+.progress { position: absolute; z-index: 5; top: calc(var(--mid) - 480 * var(--u) + 16 * var(--u)); left: calc(50% - 252 * var(--u)); width: calc(504 * var(--u)); display: flex; gap: 4px; pointer-events: none; }
 .progress i { flex: 1; height: 3px; border-radius: 2px; background: currentColor; opacity: .3; transition: opacity .3s; }
 .progress i.on { opacity: 1; }
 
@@ -44,23 +50,28 @@ body:has(.viewer) { transition: background-color .5s ease; }
 .slide {
   position: absolute;
   inset: 0;
+  z-index: 1;
   overflow: hidden;
   background: var(--bg);
   color: var(--fg);
   opacity: 0;
   visibility: hidden;
-  transform: translateX(6%);
-  transition: opacity .45s ease, transform .45s ease, visibility 0s linear .45s;
+  /* The slide being left stays opaque underneath until the new one has faded in
+     on top, so no other color shows through mid-transition. */
+  transition: opacity 0s linear .45s, visibility 0s linear .45s;
 }
-.slide.active { opacity: 1; visibility: visible; transform: none; transition: opacity .45s ease, transform .45s ease; }
-.slide.past { transform: translateX(-6%); }
+.slide.active { z-index: 2; opacity: 1; visibility: visible; transition: opacity .45s ease; }
+/* Only the content slides; the full-screen color layer stays put, so no gutters open. */
+.slide .frame { transform: translateX(6%); transition: transform .45s ease; }
+.slide.past .frame { transform: translateX(-6%); }
+.slide.active .frame { transform: none; }
 
 .frame {
   position: absolute;
   width: calc(540 * var(--u));
   height: calc(960 * var(--u));
   left: calc(50% - 270 * var(--u));
-  top: calc(50% - 480 * var(--u));
+  top: calc(var(--mid) - 480 * var(--u));
   background: var(--bg);
   padding: calc(70 * var(--u)) calc(42 * var(--u)) calc(70 * var(--u));
   display: flex;
@@ -181,6 +192,7 @@ body:has(.viewer) { transition: background-color .5s ease; }
 /* outro */
 .outro-actions { display: flex; flex-direction: column; gap: calc(12 * var(--u)); margin-top: calc(34 * var(--u)); }
 .outro-actions > * { font-size: calc(20 * var(--u)); padding: calc(16 * var(--u)) calc(26 * var(--u)); }
+.outro .cta-big { font-size: calc(30 * var(--u)); padding: calc(24 * var(--u)) calc(36 * var(--u)); box-shadow: 0 calc(10 * var(--u)) calc(28 * var(--u)) rgba(0,0,0,.22); }
 .outro .btn-primary { background: #fff; color: #2a0f00; }
 .outro .btn-secondary { background: rgba(0,0,0,.14); color: #fff; }
 
@@ -192,10 +204,11 @@ body:has(.viewer) { transition: background-color .5s ease; }
 
 /* export: html2canvas renders a frozen, fully visible slide */
 .capturing .slide, .capturing .slide * { animation: none !important; transition: none !important; }
-.capturing .slide.active { opacity: 1; visibility: visible; transform: none; }
+.capturing .slide.active { opacity: 1; visibility: visible; }
+.capturing .slide .frame { transform: none; }
 
 /* ── Share bar ─────────────────────────────────────────────── */
-.actions { height: 60px; display: flex; align-items: center; justify-content: center; }
+.actions { position: absolute; z-index: 6; left: 0; right: 0; bottom: var(--safe-bottom); height: var(--bar); display: flex; align-items: center; justify-content: center; }
 .share-btn {
   display: inline-flex; align-items: center; gap: 10px;
   background: #fff; color: #111; border: 0; border-radius: 999px;
@@ -206,11 +219,9 @@ body:has(.viewer) { transition: background-color .5s ease; }
 .share-btn:active { transform: scale(.97); }
 .share-btn[disabled] { opacity: .7; }
 
-/* Desktop: moving the full-viewport color layer exposes edge gutters during
-   crossfades. Keep the desktop canvas fixed, and leave slide sharing to mobile. */
+/* Desktop: no share bar (slide sharing is a phone thing) and a still crossfade. */
 @media (hover: hover) and (pointer: fine) {
-  .slide, .slide.past { transform: none; }
-  .slide { transition: opacity .45s ease, visibility 0s linear .45s; }
-  .slide.active { transition: opacity .45s ease; }
+  .viewer { --bar: 0px; }
+  .slide .frame, .slide.past .frame { transform: none; }
   .actions { display: none; }
 }

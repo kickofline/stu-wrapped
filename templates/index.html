@@ -22,7 +22,7 @@
 <main class="landing">
   <i class="blob b1"></i><i class="blob b2"></i>
   <div class="landing-inner">
-    <p class="eyebrow">{{ semester_label }} is here</p>
+    <p class="eyebrow">{% if vs_name %}{{ vs_name }} shared theirs. Your turn.{% else %}{{ semester_label }} is here{% endif %}</p>
     <h1 class="display">OBU <br class="tall-only">STU<br>WRAPPED</h1>
     <p class="lede">Your semester of CFA runs, Dr. Jack's lattes and Caf swipes, wrapped up.</p>
 
