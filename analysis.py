@@ -25,6 +25,7 @@ TIMEOUT = 120
 
 MENUS_FILE = os.path.join(os.path.dirname(__file__), "menus.md")
 CACHE_FILE = os.path.join(os.path.dirname(__file__), "data", "normalize_cache.json")
+NORMALIZE_CACHE_VERSION = "2"  # bump whenever receipt-cleanup rules change
 _cache_lock = threading.Lock()
 
 
@@ -60,7 +61,8 @@ NORMALIZE_SYSTEM = """You clean up college dining register receipts.
 Each receipt is one purchase: a location and its register lines (quantity x name $line total).
 Lines are abbreviated, and add-ons are separate lines that belong to the item before them:
 milk swaps, syrups, extra shots, sauces, "Add ..." lines, combo upsizes, and included $0 sides or drinks.
-
+At Tacos 4 Life, "Hungry for More" is a combo upsell/modifier, never a standalone item; fold it into the entrée it modifies.
+At Dr. Jack's, "Matcha Tea" and "Matcha Latte" are the same drink; always name the item "Matcha Latte".
 For every receipt, return the real items the student got:
 - Fold add-on lines into the item they modify; add their price to that item's total.
 - "item": the menu name without size or add-ons, e.g. "Matcha Latte", "Chick-fil-A Nuggets (8 ct) Meal", "Fried Chicken Taco".
@@ -83,6 +85,10 @@ def _signature(tx: dict) -> str:
     location = re.sub(r"\s+\d+$", "", tx["location"])
     lines = "; ".join(f'{i["qty"]} x {i["name"]} ${(i.get("subtotal") or 0):.2f}' for i in tx["items"])
     return f"{location} | {lines}"
+
+
+def _cache_key(signature: str) -> str:
+    return f"{NORMALIZE_CACHE_VERSION}:{signature}"
 
 
 def _receipt_total(tx: dict) -> float:
@@ -112,8 +118,9 @@ def normalize(transactions: list) -> None:
     pending = {}
     for tx in transactions:
         sig = _signature(tx)
-        if sig in cache:
-            tx["clean_items"] = cache[sig]
+        key = _cache_key(sig)
+        if key in cache:
+            tx["clean_items"] = cache[key]
         else:
             pending.setdefault(sig, []).append(tx)
 
@@ -132,7 +139,7 @@ def normalize(transactions: list) -> None:
                 continue
             clean = [{"item": i["item"].strip(), "detail": (i.get("detail") or "").strip(),
                       "qty": int(i["qty"]), "total": round(float(i["total"]), 2)} for i in items]
-            cache[sig] = clean
+            cache[_cache_key(sig)] = clean
             for tx in pending[sig]:
                 tx["clean_items"] = clean
 
