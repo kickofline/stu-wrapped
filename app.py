@@ -6,7 +6,7 @@ import secrets
 import threading
 import traceback
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from dotenv import load_dotenv
 from flask import (Flask, Response, abort, flash, jsonify, redirect,
@@ -15,7 +15,7 @@ from flask import (Flask, Response, abort, flash, jsonify, redirect,
 load_dotenv()
 
 import analysis
-from insights import spot_name, time_insights
+from insights import parse_when, spot_name, time_insights
 from jobs import (active_job_for, claim, claim_waiting, cleanup_old_jobs,
                   create_job, fail, finish, get_job, update_progress)
 from mailbox import (delete_credentials, is_tag, load_credentials, new_tag,
@@ -149,6 +149,47 @@ def _semester_dates() -> tuple[str, str, str]:
     return start.isoformat(), today.isoformat(), label
 
 
+# Last day of finals (OBU 2026-27 residential catalog: Fall Dec 14-17, Spring May 3-7).
+# Check the new catalog each year.
+SEMESTER_END = {"Fall": (12, 17), "Spring": (5, 7)}
+
+
+def _flex_plan(transactions: list, meta: dict) -> dict | None:
+    """Flex left, what it takes to use it up by the end of finals, and where the
+    current pace lands. None when the run has no Flex balance or the semester is over."""
+    flex = [v for k, v in (meta.get("balances") or {}).items() if "flex" in k.lower()]
+    if not flex:
+        return None
+    balance = round(sum(flex), 2)
+    start, today = date.fromisoformat(meta["startdate"]), date.fromisoformat(meta["enddate"])
+    month, day = SEMESTER_END["Spring" if start.month <= 6 else "Fall"]
+    end = date(start.year, month, day)
+    days_left = (end - today).days
+    if days_left <= 0:
+        return None
+
+    plan = {
+        "balance": balance,
+        "end": f"{end:%B} {end.day}",
+        "days_left": days_left,
+        "per_day": round(balance / days_left, 2),
+        "per_week": round(balance / days_left * 7, 2),
+        "pace_per_week": None, "projected_left": None, "runs_out": None,
+    }
+    dates = [d for d in (parse_when(tx["date"], start.year) for tx in transactions) if d]
+    if dates:
+        spent = sum(tx["grand_total"] for tx in transactions)
+        pace = spent / max(1, (today - min(dates).date()).days + 1)  # dollars per day so far
+        plan["pace_per_week"] = round(pace * 7, 2)
+        projected = balance - pace * days_left
+        if projected >= 0:
+            plan["projected_left"] = round(projected, 2)
+        else:
+            out = today + timedelta(days=int(balance / pace))
+            plan["runs_out"] = f"{out:%B} {out.day}"
+    return plan
+
+
 # ── Results (persisted so share links outlive restarts) ─────────────────────
 
 def _save_result(transactions: list, swipes: list, metadata: dict, ai: dict | None) -> str:
@@ -178,7 +219,7 @@ def _start_job(job_id: str, tag: str, invite: dict) -> None:
 def _run_job(job_id: str, tag: str, invite: dict) -> None:
     startdate, enddate, label = _semester_dates()
     try:
-        transactions, swipes = fetch_activity(
+        transactions, swipes, balances = fetch_activity(
             invite["username"], invite["password"], startdate, enddate,
             progress=lambda step, msg: update_progress(job_id, step, msg),
         )
@@ -211,6 +252,7 @@ def _run_job(job_id: str, tag: str, invite: dict) -> None:
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "startdate": startdate, "enddate": enddate,
         "name": invite.get("name"),
+        "balances": balances,
     }
     ai = None
     if analysis.enabled():
@@ -249,6 +291,7 @@ def _summary(transactions: list, swipes: list, metadata: dict, label: str) -> di
         "earliest": times and times["earliest"],
         "latest": times and times["latest"],
         "avg_visits_per_weekday": times and {w["day"]: w["avg"] for w in times["weekdays"]},
+        "flex_left": _flex_plan(transactions, metadata),
         "meal_swipes": swipe_stats and {
             "total": swipe_stats["count"],
             "by_meal": {m["meal"]: m["count"] for m in swipe_stats["meal_totals"]},
@@ -416,6 +459,7 @@ def wrapped(share_id):
         drjacks_spend=drjacks_spend,
         times=time_insights(transactions, meta["startdate"], meta["enddate"]),
         swipes=time_insights(result.get("swipes", []), meta["startdate"], meta["enddate"]),
+        flex=_flex_plan(transactions, meta),
         ai=result.get("analysis"),
         total_runs=stats["total_runs"],
         pct_rank=pct_rank,

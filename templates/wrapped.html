@@ -63,6 +63,26 @@
     <p class="stats-label">on campus dining</p>
   </div>
 
+  {% if flex %}
+  <!-- ── Flex left + what it takes to use it up ─────────────── -->
+  <div class="slide slide-flex">
+    <p class="stats-label">You still have</p>
+    <p class="stats-big">${{ "%.2f"|format(flex.balance) }}</p>
+    <p class="stats-label">in Flex Bucks</p>
+    <p class="stats-divider">—</p>
+    <p class="stats-sub">To use it all by {{ flex.end }} ({{ flex.days_left }} days), spend
+      <strong>${{ "%.2f"|format(flex.per_week) }}</strong> a week
+      (<strong>${{ "%.2f"|format(flex.per_day) }}</strong> a day)</p>
+    {% if flex.pace_per_week is not none %}
+    <p class="stats-sub flex-pace">
+      You've been spending <strong>${{ "%.2f"|format(flex.pace_per_week) }}</strong> a week.
+      {% if flex.runs_out %}At that pace you'll run out around <strong>{{ flex.runs_out }}</strong>.
+      {% else %}At that pace you'll finish with <strong>${{ "%.2f"|format(flex.projected_left) }}</strong> left.{% endif %}
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <!-- ── Total + weekly rate ───────────────────────────────── -->
   <div class="slide slide-stats">
     <p class="stats-label">You ordered</p>
