@@ -45,6 +45,17 @@
 
 {% block content %}{% endblock %}
 
+<script>
+  /* Usage analytics: one beacon per event to our own /api/event (see analytics.py). */
+  function track(name, props) {
+    try {
+      const body = new Blob([JSON.stringify(Object.assign({ name: name }, props || {}))], { type: 'application/json' });
+      if (!(navigator.sendBeacon && navigator.sendBeacon('/api/event', body))) {
+        fetch('/api/event', { method: 'POST', body: body, keepalive: true }).catch(function () {});
+      }
+    } catch (_) { /* analytics must never break the page */ }
+  }
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

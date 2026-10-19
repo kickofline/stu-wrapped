@@ -34,7 +34,7 @@
     <div class="progress" id="progress"></div>
 
     <!-- ── Intro ─────────────────────────────────────────────── -->
-    <section class="slide t-navy l1 active"><div class="frame">
+    <section class="slide t-navy l1 active" data-slide="intro"><div class="frame">
       {{ blobs() }}
       <div class="body top">
         <p class="eyebrow">{% if first_name %}{{ first_name }}, your{% else %}Your{% endif %}</p>
@@ -45,7 +45,7 @@
 
     <!-- ── Total spent ───────────────────────────────────────── -->
     {% if total_spend %}
-    <section class="slide t-pink l2"><div class="frame">
+    <section class="slide t-pink l2" data-slide="spent"><div class="frame">
       {{ blobs() }}
       <div class="body center">
         <p class="eyebrow">This semester you spent</p>
@@ -60,7 +60,7 @@
     <!-- ── #1 item ───────────────────────────────────────────── -->
     {% if items %}
     {% set top = items[0] %}
-    <section class="slide t-red l3"><div class="frame">
+    <section class="slide t-red l3" data-slide="obsession"><div class="frame">
       {{ blobs() }}
       <div class="body bottom">
         <p class="eyebrow">Your #1 obsession</p>
@@ -76,7 +76,7 @@
 
     <!-- ── Signature order ──────────────────────────────────── -->
     {% if usual %}
-    <section class="slide t-green l2"><div class="frame">
+    <section class="slide t-green l2" data-slide="usual"><div class="frame">
       {{ blobs() }}
       <div class="body center">
         <p class="eyebrow">Your usual</p>
@@ -97,7 +97,7 @@
 
     <!-- ── Dining personality ────────────────────────────────── -->
     {% if ai %}
-    <section class="slide t-purple l4"><div class="frame">
+    <section class="slide t-purple l4" data-slide="personality"><div class="frame">
       {{ blobs() }}
       <div class="body center">
         <p class="eyebrow">Your dining personality</p>
@@ -110,7 +110,7 @@
 
     <!-- ── Deterministic badges ─────────────────────────────── -->
     {% if badges %}
-    <section class="slide t-orange l3"><div class="frame">
+    <section class="slide t-orange l3" data-slide="badges"><div class="frame">
       {{ blobs() }}
       <div class="body center">
         <p class="eyebrow">Badges earned</p>
@@ -130,7 +130,7 @@
 
     {% if times %}
     <!-- ── Favorite spots by meal ────────────────────────────── -->
-    <section class="slide t-blue l1"><div class="frame">
+    <section class="slide t-blue l1" data-slide="spots"><div class="frame">
       {{ blobs() }}
       <div class="body top">
         <h2 class="display" style="--fs: 52">Your favorite<br>spots</h2>
@@ -150,7 +150,7 @@
     </div></section>
 
     <!-- ── Earliest / latest bite ────────────────────────────── -->
-    <section class="slide t-orange l2"><div class="frame">
+    <section class="slide t-orange l2" data-slide="earliest-latest"><div class="frame">
       {{ blobs() }}
       <div class="body center">
         <p class="emoji">🐛</p>
@@ -170,7 +170,7 @@
 
     <!-- ── Caf swipes ────────────────────────────────────────── -->
     {% if swipes %}
-    <section class="slide t-purple l4"><div class="frame">
+    <section class="slide t-purple l4" data-slide="caf-swipes"><div class="frame">
       {{ blobs() }}
       <div class="body top">
         <p class="eyebrow">You swiped into the Caf</p>
@@ -196,7 +196,7 @@
 
     <!-- ── Tiger Express (the Caf's grab-and-go; 2+ swipes) ──── -->
     {% if tiger %}
-    <section class="slide t-orange l1"><div class="frame">
+    <section class="slide t-orange l1" data-slide="tiger-express"><div class="frame">
       {{ blobs() }}
       <div class="body center">
         <p class="eyebrow">You grabbed lunch at Tiger Express</p>
@@ -218,7 +218,7 @@
     <!-- ── Streaks ───────────────────────────────────────────── -->
     {% if streaks %}
     {% set run = streaks.caf or streaks.food %}
-    <section class="slide t-blue l3"><div class="frame">
+    <section class="slide t-blue l3" data-slide="streak"><div class="frame">
       {{ blobs() }}
       <div class="body center">
         <p class="eyebrow">{% if streaks.caf %}Your longest Caf streak{% else %}Your longest streak{% endif %}</p>
@@ -237,7 +237,7 @@
 
     <!-- ── Flex left ─────────────────────────────────────────── -->
     {% if flex %}
-    <section class="slide t-green l1"><div class="frame">
+    <section class="slide t-green l1" data-slide="flex-left"><div class="frame">
       {{ blobs() }}
       <div class="body center">
         <p class="eyebrow">Flex Bucks left</p>
@@ -257,7 +257,7 @@
 
     {% if ai %}
     <!-- ── Roast ─────────────────────────────────────────────── -->
-    <section class="slide t-red l2"><div class="frame">
+    <section class="slide t-red l2" data-slide="roast"><div class="frame">
       {{ blobs() }}
       <div class="body center">
         <p class="emoji">🔥</p>
@@ -268,7 +268,7 @@
     </div></section>
 
     <!-- ── Money talk ────────────────────────────────────────── -->
-    <section class="slide t-blue l3"><div class="frame">
+    <section class="slide t-blue l3" data-slide="money-talk"><div class="frame">
       {{ blobs() }}
       <div class="body center">
         <h2 class="display ac" style="--fs: 72">Money<br>talk 💸</h2>
@@ -282,7 +282,7 @@
 
     <!-- ── Campus percentiles (three-student minimum) ───────── -->
     {% if campus %}
-    <section class="slide t-pink l4"><div class="frame">
+    <section class="slide t-pink l4" data-slide="rankings"><div class="frame">
       {{ blobs() }}
       <div class="body center">
         <p class="eyebrow">How you stack up</p>
@@ -302,7 +302,7 @@
     {% endif %}
 
     <!-- ── Summary card ──────────────────────────────────────── -->
-    <section class="slide t-navy l1 summary"><div class="frame">
+    <section class="slide t-navy l1 summary" data-slide="summary"><div class="frame">
       {{ blobs() }}
       <div class="body top">
         <p class="eyebrow plain">{% if first_name %}{{ first_name }}'s {% endif %}{{ semester_label }}</p>
@@ -352,7 +352,7 @@
     </div></section>
 
     <!-- ── Outro (not a share image: the share button sends the link) ── -->
-    <section class="slide t-orange l2 outro" data-share="link"><div class="frame">
+    <section class="slide t-orange l2 outro" data-share="link" data-slide="outro"><div class="frame">
       {{ blobs() }}
       <div class="body center">
         {% if viewer.owner %}
@@ -394,6 +394,7 @@
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
   const SHARE_URL = {{ share_url | tojson }};
+  const SHARE_ID = {{ share_id | tojson }};
   const SHARE_TITLE = {{ ((first_name ~ "'s OBU Stu Wrapped") if first_name else "My OBU Stu Wrapped") | tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/wrapped.js') }}"></script>

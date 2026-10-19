@@ -48,7 +48,7 @@
         </li>
         <li>
           <p class="eyebrow">2 · Add it as a Flex Bucks guest</p>
-          <a class="pill pill-light" href="https://connectobu.atriumcampus.com/guestaccess.php" target="_blank" rel="noopener">Open Flex Bucks ↗</a>
+          <a class="pill pill-light" href="https://connectobu.atriumcampus.com/guestaccess.php" target="_blank" rel="noopener" onclick="track('flex_link_opened')">Open Flex Bucks ↗</a>
         </li>
         <li>
           <p class="eyebrow">3 · Get your Wrapped</p>
@@ -67,6 +67,7 @@
 <script>
   function copyAddr(btn) {
     const text = document.getElementById('plus-addr-text').textContent.trim();
+    track('email_copied');
     navigator.clipboard.writeText(text).then(function () {
       btn.textContent = 'Copied!';
       setTimeout(function () { btn.textContent = 'Copy'; }, 2000);

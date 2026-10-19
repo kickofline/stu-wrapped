@@ -14,10 +14,13 @@ const shareLabel = document.getElementById('share-label');
 const bars = slides.map(() => progress.appendChild(document.createElement('i')));
 const images = new Map();   // slide index -> Promise<Blob>
 let current = 0;
+let furthest = 0;          // deepest slide reached, reported when the page is hidden
+let reportedFurthest = -1;
 
 function show(index) {
   if (index < 0 || index >= slides.length) return;
   current = index;
+  furthest = Math.max(furthest, index);
   slides.forEach((slide, i) => {
     slide.classList.toggle('active', i === index);
     slide.classList.toggle('past', i < index);
@@ -84,12 +87,20 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
+const slideName = (i) => slides[i].dataset.slide || String(i);
+
 async function shareLink() {
   if (navigator.share) {
-    try { await navigator.share({ title: SHARE_TITLE, url: SHARE_URL }); } catch (_) { /* dismissed */ }
+    try {
+      await navigator.share({ title: SHARE_TITLE, url: SHARE_URL });
+      track('share_link', { share_id: SHARE_ID, method: 'share' });
+    } catch (_) {
+      track('share_link', { share_id: SHARE_ID, method: 'dismissed' });
+    }
     return;
   }
   await navigator.clipboard.writeText(SHARE_URL);
+  track('share_link', { share_id: SHARE_ID, method: 'copy' });
   flashLabel('Link copied!');
 }
 
@@ -120,20 +131,31 @@ async function shareSlide() {
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ files: [file], title: SHARE_TITLE, text: 'Get yours at stu.exposed' });
+      track('share_slide', { share_id: SHARE_ID, slide: slideName(index), method: 'share' });
     } catch (err) {
       // iOS refuses if rendering took long enough to expire the tap; the image is
       // cached now, so the next tap shares instantly.
       if (err.name === 'NotAllowedError') flashLabel('Tap again to share');
+      else track('share_slide', { share_id: SHARE_ID, slide: slideName(index), method: 'dismissed' });
     }
     return;
   }
   download(blob, file.name);
+  track('share_slide', { share_id: SHARE_ID, slide: slideName(index), method: 'download' });
   flashLabel('Saved!');
 }
 
 shareBtn.addEventListener('click', shareSlide);
 document.querySelectorAll('.js-share-link').forEach((btn) =>
   btn.addEventListener('click', (e) => { e.stopPropagation(); shareLink(); }));
+
+// How far into the deck this visit got: sent when the page is hidden (tab switch,
+// app switch, close), and again only if they went further after coming back.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'hidden' || furthest <= reportedFurthest) return;
+  reportedFurthest = furthest;
+  track('slide_reached', { share_id: SHARE_ID, index: furthest + 1, total: slides.length, slide: slideName(furthest) });
+});
 
 // ── Big headings: shrink one until its longest word fits on a line, instead of
 // splitting the word ("Connoisseu / r"). Sizes are in frame units, so the fit is

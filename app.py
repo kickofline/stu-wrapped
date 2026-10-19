@@ -17,6 +17,7 @@ from flask import (Flask, Response, abort, flash, jsonify, redirect,
 load_dotenv()
 
 import analysis
+import analytics
 import og_image
 from insights import parse_when, spot_name, time_insights
 from social import (campus_activity, campus_percentiles, campus_wrapped, dining_badges,
@@ -350,6 +351,8 @@ def _run_job(job_id: str, tag: str, invite: dict) -> None:
         _wrap(job_id, tag, invite)
     except Exception:
         _log(f"[job {job_id}] failed:\n{traceback.format_exc()}")
+        analytics.record("wrap_failed", visitor=analytics.visitor_id(tag),
+                         student=_student_key(invite, tag), reason="crash")
         fail(job_id, "Something broke while wrapping your semester. Tap Start over to try again.")
     finally:
         _SCRAPE_SLOTS.release()
@@ -357,6 +360,13 @@ def _run_job(job_id: str, tag: str, invite: dict) -> None:
 
 def _wrap(job_id: str, tag: str, invite: dict) -> None:
     startdate, enddate, label = _semester_dates()
+    student = _student_key(invite, tag)
+
+    def failed(reason: str, message: str) -> None:
+        analytics.record("wrap_failed", visitor=analytics.visitor_id(tag), student=student,
+                         name=invite.get("name"), reason=reason)
+        fail(job_id, message)
+
     try:
         transactions, swipes, balances, pages = fetch_activity(
             invite["username"], invite["password"], startdate, enddate,
@@ -364,29 +374,28 @@ def _wrap(job_id: str, tag: str, invite: dict) -> None:
         )
     except LoginFailed:
         delete_credentials(tag)
-        fail(job_id, "Flex Bucks didn't accept the login from your invite. "
-                     "Remove our address from your Flex Bucks guests, add it again, then tap Start over.")
+        failed("login_failed", "Flex Bucks didn't accept the login from your invite. "
+                               "Remove our address from your Flex Bucks guests, add it again, then tap Start over.")
         return
     except LoginLimited:
-        fail(job_id, "Flex Bucks is limiting logins right now. "
-                     "Your invite is saved, so wait about 15 minutes and tap Start over.")
+        failed("login_limited", "Flex Bucks is limiting logins right now. "
+                                "Your invite is saved, so wait about 15 minutes and tap Start over.")
         return
     except NoAccounts:
-        fail(job_id, "We logged in, but Flex Bucks isn't sharing any accounts with your guest. "
-                     "Check that you're on a meal plan and that, in Grant Guest Access, the guest "
-                     "can view your account activity. Then tap Start over.")
+        failed("no_accounts", "We logged in, but Flex Bucks isn't sharing any accounts with your guest. "
+                              "Check that you're on a meal plan and that, in Grant Guest Access, the guest "
+                              "can view your account activity. Then tap Start over.")
         return
     except Exception:
         _log(f"[job {job_id}] scrape failed:\n{traceback.format_exc()}")
-        fail(job_id, "We couldn't load your Flex Bucks history right now. Try again in a few minutes.")
+        failed("scrape_error", "We couldn't load your Flex Bucks history right now. Try again in a few minutes.")
         return
 
     _log(f"[job {job_id}] fetched {len(transactions)} purchases, {len(swipes)} meal swipes")
-    student = _student_key(invite, tag)
     _archive_run(job_id, tag, student, invite, transactions, swipes, balances, pages)
     if not transactions and not swipes:
-        fail(job_id, f"We didn't find any Flex Bucks purchases or meal swipes for {label}. "
-                     "If you're not on a meal plan, there's nothing to wrap yet!")
+        failed("no_activity", f"We didn't find any Flex Bucks purchases or meal swipes for {label}. "
+                              "If you're not on a meal plan, there's nothing to wrap yet!")
         return
 
     metadata = {
@@ -409,6 +418,8 @@ def _wrap(job_id: str, tag: str, invite: dict) -> None:
     update_progress(job_id, 6, "Wrapping it up…")
     share_id = _save_result(transactions, swipes, metadata, ai)
     _record_run(transactions, swipes, student, date.fromisoformat(startdate).year)
+    analytics.record("wrap_finished", visitor=analytics.visitor_id(tag), student=student, share_id=share_id,
+                     name=invite.get("name"), purchases=len(transactions), swipes=len(swipes), ai=ai is not None)
     finish(job_id, share_id)
 
 
@@ -464,7 +475,8 @@ def _summary(transactions: list, swipes: list, metadata: dict, label: str) -> di
 @app.get("/")
 def index():
     tag = request.cookies.get(INBOX_COOKIE)
-    if not is_tag(tag):
+    new_visitor = not is_tag(tag)
+    if new_visitor:
         tag = _new_inbox_tag()
     vs_id = request.args.get("vs")
     vs = _result_meta(vs_id)
@@ -476,6 +488,9 @@ def index():
             "first_name": _first_name(invite) if invite.get("name") else "",
             "wrapped_url": url_for("wrapped", share_id=mine_id) if _result_meta(mine_id) else None,
         }
+    if not analytics.is_bot(request.user_agent.string):
+        analytics.record("landing_view", visitor=analytics.visitor_id(tag), share_id=vs_id if vs else None,
+                         new_visitor=new_visitor, returning=bool(invite), from_friend=bool(vs))
     resp = Response(render_template(
         "index.html", inbox_address=inbox_address(tag), semester_label=_semester_dates()[2],
         vs_name=_first_name(vs) if vs else None, returning=returning,
@@ -501,6 +516,8 @@ def switch_account():
 @app.get("/campus")
 def campus_page():
     students = list(_load_stats()["students"].values())
+    if not analytics.is_bot(request.user_agent.string):
+        analytics.record("campus_view", visitor=analytics.visitor_id(request.cookies.get(INBOX_COOKIE)))
     return render_template(
         "campus.html", campus=campus_wrapped(students),
         semester_label=_semester_dates()[2],
@@ -521,6 +538,8 @@ def start():
         flash("We're swamped right now. Try again in a minute.", "error")
         return redirect(url_for("index"))
     invite = load_credentials(tag)
+    analytics.record("wrap_started", visitor=analytics.visitor_id(tag),
+                     student=_student_key(invite, tag) if invite else None, waiting_for_invite=not invite)
     if invite and claim(job_id):
         _start_job(job_id, tag, invite)
     return redirect(url_for("wait", job_id=job_id))
@@ -566,19 +585,24 @@ def api_inbound():
     tag = tag_from_recipient(recipient)
     if not tag:
         _log(f"[inbound] ignoring mail for unknown recipient {recipient!r}")
+        analytics.record("invite_rejected", reason="unknown_recipient")
         return jsonify({"error": "unknown recipient"}), 422
 
     raw = request.get_data()
     if not is_atrium_invite(raw):
         _log(f"[inbound] dropped mail for inbox {tag[:2]}... that is not an Atrium invite")
+        analytics.record("invite_rejected", visitor=analytics.visitor_id(tag), reason="not_atrium")
         return jsonify({"error": "not an Atrium invite"}), 422
 
     invite = parse_invite(raw, tag)
     if not invite:
         _log(f"[inbound] no password in {len(raw)}-byte email for inbox {tag[:2]}...")
+        analytics.record("invite_rejected", visitor=analytics.visitor_id(tag), reason="no_password")
         return jsonify({"error": "no credentials found"}), 422
 
     save_credentials(tag, invite)
+    analytics.record("invite_received", visitor=analytics.visitor_id(tag),
+                     student=_student_key(invite, tag), name=invite.get("name"))
     woken = claim_waiting(tag)
     for job_id in woken:
         _start_job(job_id, tag, invite)
@@ -590,6 +614,8 @@ def api_inbound():
 def results(share_id):
     result = _load_result(share_id)
     meta = result["metadata"]
+    analytics.record("items_view", visitor=analytics.visitor_id(request.cookies.get(INBOX_COOKIE)),
+                     student=meta.get("student_key"), share_id=share_id)
     items = _aggregate_items(result["transactions"])
     start, end = date.fromisoformat(meta["startdate"]), date.fromisoformat(meta["enddate"])
     return render_template(
@@ -640,6 +666,7 @@ def _wrapped_context(share_id: str) -> dict:
     name = meta.get("name") or ""
     return {
         "share_id": share_id,
+        "student_key": meta.get("student_key"),
         "student_name": name,
         "first_name": name.split()[0] if name else "",
         "semester_label": semester_label,
@@ -690,6 +717,9 @@ def _viewer(share_id: str) -> dict:
 def wrapped(share_id):
     ctx = _wrapped_context(share_id)
     viewer = _viewer(share_id)
+    if not analytics.is_bot(request.user_agent.string):
+        analytics.record("wrapped_view", visitor=analytics.visitor_id(request.cookies.get(INBOX_COOKIE)),
+                         student=ctx.get("student_key"), share_id=share_id, owner=viewer["owner"])
     resp = Response(render_template(
         "wrapped.html",
         **ctx,
@@ -767,6 +797,10 @@ def compare_results(left_id, right_id):
         flash("Those links belong to the same student. Ask a friend for theirs!", "error")
         return redirect(url_for("compare_start", share_id=left_id))
     match = friend_match(left, right)
+    if not analytics.is_bot(request.user_agent.string):
+        analytics.record("compare_view", visitor=analytics.visitor_id(request.cookies.get(INBOX_COOKIE)),
+                         student=(_result_meta(left_id) or {}).get("student_key"), share_id=left_id,
+                         other=right_id, other_student=(_result_meta(right_id) or {}).get("student_key"))
     share_url = url_for(
         "compare_results", left_id=left_id, right_id=right_id,
         _external=True, _scheme="https",
@@ -780,6 +814,8 @@ def compare_results(left_id, right_id):
 @app.get("/og/<share_id>.png")
 def og_result(share_id):
     ctx = _wrapped_context(share_id)
+    analytics.record("link_preview", student=ctx.get("student_key"), share_id=share_id,
+                     app=analytics.preview_app(request.user_agent.string))
     path = os.path.join(OG_DIR, f"{share_id}.png")
     if not os.path.exists(path):
         os.makedirs(OG_DIR, exist_ok=True)
@@ -852,7 +888,10 @@ def api_results(share_id):
 
 @app.get("/download/<share_id>/csv")
 def download_csv(share_id):
-    items = _aggregate_items(_load_result(share_id)["transactions"])
+    result = _load_result(share_id)
+    analytics.record("csv_download", visitor=analytics.visitor_id(request.cookies.get(INBOX_COOKIE)),
+                     student=result["metadata"].get("student_key"), share_id=share_id)
+    items = _aggregate_items(result["transactions"])
     lines = ["rank,item,qty,total_spend"]
     for item in items:
         safe = item["name"].replace('"', '""')
@@ -863,6 +902,35 @@ def download_csv(share_id):
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=stu_wrapped.csv"},
     )
+
+
+@app.post("/api/event")
+def api_event():
+    """Browser-side analytics (shares, copied email, how far into the deck). Only names
+    in analytics.CLIENT_EVENTS, only their listed properties, short string values."""
+    if (request.content_length or 0) > 2048:
+        return "", 400
+    data = request.get_json(silent=True, force=True)
+    if not isinstance(data, dict):
+        return "", 400
+    name = data.get("name")
+    allowed = analytics.CLIENT_EVENTS.get(name)
+    if allowed is None:
+        return "", 400
+    props = {}
+    for key in allowed:
+        value = data.get(key)
+        if isinstance(value, bool) or not isinstance(value, (str, int)):
+            continue
+        props[key] = value[:40] if isinstance(value, str) else value
+    if "method" in props and props["method"] not in analytics.SHARE_METHODS:
+        return "", 400
+    share_id = data.get("share_id")
+    meta = _result_meta(share_id) if isinstance(share_id, str) else None
+    analytics.record(name, visitor=analytics.visitor_id(request.cookies.get(INBOX_COOKIE)),
+                     student=meta.get("student_key") if meta else None,
+                     share_id=share_id if meta else None, **props)
+    return "", 204
 
 
 if __name__ == "__main__":
