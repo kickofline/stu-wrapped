@@ -19,7 +19,8 @@ load_dotenv()
 import analysis
 import og_image
 from insights import parse_when, spot_name, time_insights
-from social import campus_percentiles, dining_badges, friend_match, item_quantities, signature_order
+from social import (campus_percentiles, dining_badges, friend_match,
+                    signature_order, summary_highlights)
 from jobs import (active_job_for, claim, claim_waiting, cleanup_old_jobs,
                   create_job, fail, finish, get_job, update_progress)
 from mailbox import (delete_credentials, is_tag, load_credentials, new_tag,
@@ -449,7 +450,6 @@ def _wrapped_context(share_id: str) -> dict:
     semester_label = f"{'Spring' if start.month <= 6 else 'Fall'} {start.year}"
     times = time_insights(transactions, meta["startdate"], meta["enddate"])
     swipes = time_insights(result.get("swipes", []), meta["startdate"], meta["enddate"])
-    all_spots = next((g["top"] for g in (times or {}).get("spots", []) if g["meal"] == "All visits"), [])
 
     current = _student_summary(transactions, result.get("swipes", []))
     stored = _load_stats()["students"]
@@ -467,6 +467,7 @@ def _wrapped_context(share_id: str) -> dict:
     campus = campus_percentiles(current, students)
     usual = signature_order(transactions)
     badges = dining_badges(transactions, result.get("swipes", []), meta)
+    summary = summary_highlights(transactions, result.get("swipes", []), meta)
 
     name = meta.get("name") or ""
     return {
@@ -481,7 +482,6 @@ def _wrapped_context(share_id: str) -> dict:
         "total_spend": total_spend,
         "unique_items": len(items),
         "items": items[:5],
-        "top_spots": all_spots,
         "times": times,
         "swipes": swipes,
         "swipe_top_meal": max(swipes["meal_totals"], key=lambda m: m["count"])["meal"] if swipes else None,
@@ -490,6 +490,7 @@ def _wrapped_context(share_id: str) -> dict:
         "campus": campus,
         "usual": usual,
         "badges": badges,
+        "summary": summary,
     }
 
 

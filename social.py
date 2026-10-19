@@ -79,6 +79,78 @@ def signature_order(transactions: list) -> dict | None:
     }
 
 
+def summary_highlights(transactions: list, swipes: list, metadata: dict) -> dict:
+    """Compact, non-ranking facts for the final share card."""
+    year = date.fromisoformat(metadata["startdate"]).year
+    parsed_transactions = [
+        (when, transaction)
+        for transaction in transactions
+        if (when := parse_when(transaction.get("date", ""), year))
+    ]
+
+    day_spend = Counter()
+    day_visits = Counter()
+    for when, transaction in parsed_transactions:
+        day_spend[when.date()] += float(transaction.get("grand_total") or 0)
+        day_visits[when.date()] += 1
+    biggest_day = None
+    if day_spend:
+        day = max(day_spend, key=lambda value: (day_spend[value], value))
+        biggest_day = {
+            "date": f"{day:%b} {day.day}",
+            "amount": round(day_spend[day], 2),
+            "visits": day_visits[day],
+        }
+
+    biggest_order = None
+    if transactions:
+        transaction = max(
+            transactions,
+            key=lambda value: (float(value.get("grand_total") or 0), value.get("date", "")),
+        )
+        order_items = _transaction_items(transaction)
+        biggest_order = {
+            "amount": round(float(transaction.get("grand_total") or 0), 2),
+            "spot": spot_name(transaction.get("location", "")),
+            "item": order_items[0]["name"] if order_items else "Flex order",
+            "more_items": max(0, len(order_items) - 1),
+        }
+
+    moments = [when for when, _ in parsed_transactions]
+    moments.extend(
+        when for swipe in swipes
+        if (when := parse_when(swipe.get("date", ""), year))
+    )
+    routine = None
+    if moments:
+        weekdays = Counter(when.weekday() for when in moments)
+        weekday = max(range(7), key=lambda value: (weekdays[value], -value))
+        meals = Counter(
+            "Breakfast" if when.hour * 60 + when.minute < 10 * 60 + 30
+            else "Lunch" if when.hour < 16
+            else "Dinner"
+            for when in moments
+        )
+        meal_order = ("Breakfast", "Lunch", "Dinner")
+        meal = max(meal_order, key=lambda value: (meals[value], -meal_order.index(value)))
+        routine = {
+            "weekday": ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")[weekday],
+            "weekday_visits": weekdays[weekday],
+            "meal": meal,
+            "meal_visits": meals[meal],
+            "late_night": sum(when.hour >= 20 or when.hour < 4 for when in moments),
+        }
+
+    return {
+        "biggest_day": biggest_day,
+        "biggest_order": biggest_order,
+        "routine": routine,
+        "caf_swipes": len(swipes),
+        "flex_visits": len(transactions),
+        "flex_spend": round(sum(float(transaction.get("grand_total") or 0) for transaction in transactions), 2),
+    }
+
+
 def dining_badges(transactions: list, swipes: list, metadata: dict) -> list[dict]:
     """Return the three strongest rule-based badges, in stable order."""
     year = date.fromisoformat(metadata["startdate"]).year

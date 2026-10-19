@@ -268,11 +268,36 @@
           <p class="display" style="--fs: 38">{{ ai.personality.title }}</p>
         </div>
         {% endif %}
-        <div class="grid">
-          {% if items %}<div><h4>Top items</h4><ol>{% for i in items[:4] %}<li><span>{{ loop.index }}</span>{{ i.name }}</li>{% endfor %}</ol></div>{% endif %}
-          {% if top_spots %}<div><h4>Top spots</h4><ol>{% for s in top_spots %}<li><span>{{ loop.index }}</span>{{ s.location }}</li>{% endfor %}</ol></div>{% endif %}
-          {% if swipes %}<div><h4>Caf swipes</h4><p class="stat">{{ swipes.count }}</p></div>{% endif %}
-          {% if total_spend %}<div><h4>Spent on Flex</h4><p class="stat">{{ money(total_spend) }}</p></div>{% endif %}
+        <div class="grid summary-facts">
+          {% if summary.biggest_day %}
+          <div class="summary-fact">
+            <h4>Biggest Flex day</h4>
+            <p class="stat">{{ money(summary.biggest_day.amount) }}</p>
+            <p class="fact-detail">{{ summary.biggest_day.date }} · {{ summary.biggest_day.visits }} visit{% if summary.biggest_day.visits != 1 %}s{% endif %}</p>
+          </div>
+          {% endif %}
+          {% if summary.biggest_order %}
+          <div class="summary-fact">
+            <h4>Biggest order</h4>
+            <p class="stat">{{ money(summary.biggest_order.amount) }}</p>
+            <p class="fact-detail">{{ summary.biggest_order.item }}{% if summary.biggest_order.more_items %} +{{ summary.biggest_order.more_items }} more{% endif %} · {{ summary.biggest_order.spot }}</p>
+          </div>
+          {% endif %}
+          {% if summary.routine %}
+          <div class="summary-fact">
+            <h4>Your routine</h4>
+            <p class="stat compact">{{ summary.routine.weekday }}</p>
+            <p class="fact-detail">{{ summary.routine.meal }} most often{% if summary.routine.late_night %} · {{ summary.routine.late_night }} after 8 PM{% endif %}</p>
+          </div>
+          {% endif %}
+          <div class="summary-fact">
+            <h4>Caf vs Flex</h4>
+            <div class="plan-split">
+              <p><b>{{ summary.caf_swipes }}</b><span>Caf swipes</span></p>
+              <p><b>{{ summary.flex_visits }}</b><span>Flex visits</span></p>
+            </div>
+            <p class="fact-detail">{{ money(summary.flex_spend) }} spent on Flex</p>
+          </div>
         </div>
         {% if ai %}
         <div class="panel">

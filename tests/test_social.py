@@ -1,7 +1,8 @@
 import unittest
 from datetime import datetime
 
-from social import campus_percentiles, dining_badges, friend_match, signature_order
+from social import (campus_percentiles, dining_badges, friend_match,
+                    signature_order, summary_highlights)
 
 
 class SocialInsightsTests(unittest.TestCase):
@@ -67,6 +68,45 @@ class SocialInsightsTests(unittest.TestCase):
         )
         self.assertEqual(match["likely_meals"], 2)
         self.assertEqual(len(match["likely_meal_times"]), 2)
+
+    def test_summary_highlights_replace_restaurant_rankings(self):
+        transactions = [
+            {
+                "date": "Oct 5, 2026 12:00PM", "location": "CFA", "grand_total": 5,
+                "clean_items": [{"item": "Sandwich", "detail": "", "qty": 1, "total": 5}],
+            },
+            {
+                "date": "Oct 5, 2026 06:00PM", "location": "Dr Jacks", "grand_total": 9,
+                "clean_items": [{"item": "Burger", "detail": "", "qty": 1, "total": 9}],
+            },
+            {
+                "date": "Oct 6, 2026 12:00PM", "location": "Tacos 1", "grand_total": 20,
+                "clean_items": [
+                    {"item": "Tacos", "detail": "", "qty": 2, "total": 16},
+                    {"item": "Drink", "detail": "", "qty": 1, "total": 4},
+                ],
+            },
+        ]
+        swipes = [
+            {"date": "Oct 5, 2026 12:15PM", "location": "Commons PAX 1"},
+            {"date": "Oct 5, 2026 12:30PM", "location": "Commons PAX 1"},
+        ]
+
+        summary = summary_highlights(
+            transactions, swipes, {"startdate": "2026-07-01"},
+        )
+
+        self.assertEqual(summary["biggest_day"], {
+            "date": "Oct 6", "amount": 20, "visits": 1,
+        })
+        self.assertEqual(summary["biggest_order"]["item"], "Tacos")
+        self.assertEqual(summary["biggest_order"]["more_items"], 1)
+        self.assertEqual(summary["routine"]["weekday"], "Monday")
+        self.assertEqual(summary["routine"]["meal"], "Lunch")
+        self.assertEqual(
+            (summary["caf_swipes"], summary["flex_visits"], summary["flex_spend"]),
+            (2, 3, 34),
+        )
 
 
 if __name__ == "__main__":
