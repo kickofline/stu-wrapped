@@ -19,8 +19,8 @@ load_dotenv()
 import analysis
 import og_image
 from insights import parse_when, spot_name, time_insights
-from social import (campus_percentiles, dining_badges, friend_match,
-                    signature_order, summary_highlights)
+from social import (campus_activity, campus_percentiles, campus_wrapped, dining_badges,
+                    dining_streaks, friend_match, signature_order, summary_highlights)
 from jobs import (active_job_for, claim, claim_waiting, cleanup_old_jobs,
                   create_job, fail, finish, get_job, update_progress)
 from mailbox import (delete_credentials, inbox_address, is_tag, load_credentials,
@@ -187,9 +187,10 @@ def _student_summary(transactions: list, swipes: list) -> dict:
     }
 
 
-def _record_run(transactions: list, swipes: list, student_key: str) -> None:
+def _record_run(transactions: list, swipes: list, student_key: str, year: int) -> None:
     """Store this student's latest run in the campus-wide comparison stats."""
     summary = _student_summary(transactions, swipes)
+    summary.update(campus_activity(transactions, swipes, year))
     summary["updated"] = datetime.now().isoformat(timespec="seconds")
     with _stats_lock:
         _record_raw_items(transactions)
@@ -329,7 +330,7 @@ def _run_job(job_id: str, tag: str, invite: dict) -> None:
 
     update_progress(job_id, 6, "Wrapping it up...")
     share_id = _save_result(transactions, swipes, metadata, ai)
-    _record_run(transactions, swipes, student)
+    _record_run(transactions, swipes, student, date.fromisoformat(startdate).year)
     finish(job_id, share_id)
 
 
@@ -389,14 +390,44 @@ def index():
         tag = new_tag()
     vs_id = request.args.get("vs")
     vs = _result_meta(vs_id)
+    invite = load_credentials(tag)
+    returning = None
+    if invite:
+        mine_id = request.cookies.get(MINE_COOKIE)
+        returning = {
+            "first_name": _first_name(invite) if invite.get("name") else "",
+            "wrapped_url": url_for("wrapped", share_id=mine_id) if _result_meta(mine_id) else None,
+        }
     resp = Response(render_template(
         "index.html", inbox_address=inbox_address(tag), semester_label=_semester_dates()[2],
-        vs_name=_first_name(vs) if vs else None,
+        vs_name=_first_name(vs) if vs else None, returning=returning,
     ))
     _set_cookie(resp, INBOX_COOKIE, tag)
     if vs:
         _set_cookie(resp, VS_COOKIE, vs_id, max_age=30 * 24 * 3600)
     return resp
+
+
+@app.post("/switch-account")
+def switch_account():
+    """Forget this browser's saved Flex guest login and start over with a fresh inbox."""
+    tag = request.cookies.get(INBOX_COOKIE)
+    if is_tag(tag):
+        delete_credentials(tag)
+    resp = redirect(url_for("index"))
+    _set_cookie(resp, INBOX_COOKIE, new_tag())
+    resp.delete_cookie(MINE_COOKIE)
+    return resp
+
+
+@app.get("/campus")
+def campus_page():
+    students = list(_load_stats()["students"].values())
+    return render_template(
+        "campus.html", campus=campus_wrapped(students), wrapped_count=len(students),
+        semester_label=_semester_dates()[2],
+        canonical=url_for("campus_page", _external=True, _scheme="https"),
+    )
 
 
 @app.post("/start")
@@ -539,6 +570,7 @@ def _wrapped_context(share_id: str) -> dict:
         "campus": campus,
         "usual": usual,
         "badges": badges,
+        "streaks": dining_streaks(transactions, result.get("swipes", []), meta),
         "summary": summary,
     }
 
@@ -693,12 +725,13 @@ def robots_txt():
 
 @app.get("/sitemap.xml")
 def sitemap_xml():
-    home = url_for("index", _external=True, _scheme="https")
+    pages = [url_for("index", _external=True, _scheme="https"),
+             url_for("campus_page", _external=True, _scheme="https")]
     return Response(
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-        f"  <url><loc>{home}</loc><changefreq>weekly</changefreq></url>\n"
-        "</urlset>\n",
+        + "".join(f"  <url><loc>{page}</loc><changefreq>weekly</changefreq></url>\n" for page in pages)
+        + "</urlset>\n",
         mimetype="application/xml",
     )
 

@@ -1,8 +1,8 @@
 """Deterministic social insights for Wrapped slides and friend comparisons."""
 from collections import Counter
-from datetime import date
+from datetime import date, timedelta
 
-from insights import parse_when, spot_name
+from insights import WEEKDAYS, parse_when, spot_name
 from name_map import expand_name
 
 
@@ -312,4 +312,106 @@ def friend_match(left: dict, right: dict) -> dict:
             f"{when:%B} {when.day} at {when:%I:%M %p}".replace(" 0", " ")
             for when in same_minute[:3]
         ],
+    }
+
+
+def _longest_run(days: set) -> dict | None:
+    """Longest run of consecutive calendar days; the later run wins a tie."""
+    best = None
+    for day in sorted(days):
+        if day - timedelta(days=1) in days:
+            continue
+        end = day
+        while end + timedelta(days=1) in days:
+            end += timedelta(days=1)
+        length = (end - day).days + 1
+        if best is None or length >= best["days"]:
+            best = {"days": length, "start": day, "end": end}
+    return best
+
+
+def _span(run: dict) -> str:
+    start, end = run["start"], run["end"]
+    tail = str(end.day) if (start.year, start.month) == (end.year, end.month) else f"{end:%b} {end.day}"
+    return f"{start:%b} {start.day}–{tail}"
+
+
+def _event_days(events: list, year: int) -> set:
+    return {when.date() for event in events if (when := parse_when(event.get("date", ""), year))}
+
+
+def dining_streaks(transactions: list, swipes: list, metadata: dict) -> dict | None:
+    """Longest runs of consecutive days at the Caf, and eating on campus at all.
+    None when the on-campus streak is under 3 days (nothing worth a slide)."""
+    year = date.fromisoformat(metadata["startdate"]).year
+    caf_days = _event_days(swipes, year)
+    food = _longest_run(caf_days | _event_days(transactions, year))
+    if not food or food["days"] < 3:
+        return None
+    caf = _longest_run(caf_days)
+    return {
+        "caf": {"days": caf["days"], "span": _span(caf)} if caf and caf["days"] >= 2 else None,
+        "food": {"days": food["days"], "span": _span(food)},
+    }
+
+
+def campus_activity(transactions: list, swipes: list, year: int) -> dict:
+    """Per-student weekday/hour counts and best Caf streak, stored in the campus stats."""
+    weekdays, hours = [0] * 7, [0] * 24
+    for event in (*transactions, *swipes):
+        when = parse_when(event.get("date", ""), year)
+        if when:
+            weekdays[when.weekday()] += 1
+            hours[when.hour] += 1
+    caf = _longest_run(_event_days(swipes, year))
+    return {"weekdays": weekdays, "hours": hours, "caf_streak": caf["days"] if caf else 0}
+
+
+def _hour_label(hour: int) -> str:
+    return f"{hour % 12 or 12} {'AM' if hour < 12 else 'PM'}"
+
+
+def campus_wrapped(students: list[dict], minimum: int = 3) -> dict | None:
+    """Campus-wide totals from each student's latest run. None until `minimum` students
+    have wrapped; an item, spot or busiest-time stat only shows once `minimum` students
+    contribute to it, so no single student's habits can be read off the page."""
+    if len(students) < minimum:
+        return None
+    item_orders, item_students = Counter(), Counter()
+    spot_visits, spot_students = Counter(), Counter()
+    weekdays, hours, timed = [0] * 7, [0] * 24, 0
+    for student in students:
+        for name, qty in (student.get("items") or {}).items():
+            item_orders[name] += qty
+            item_students[name] += 1
+        for spot, visits in (student.get("spots") or {}).items():
+            spot_visits[spot] += visits
+            spot_students[spot] += 1
+        if student.get("weekdays") and student.get("hours"):
+            timed += 1
+            weekdays = [a + b for a, b in zip(weekdays, student["weekdays"])]
+            hours = [a + b for a, b in zip(hours, student["hours"])]
+
+    def ranked(totals: Counter, people: Counter, limit: int) -> list[dict]:
+        names = sorted((n for n in totals if people[n] >= minimum), key=lambda n: (-totals[n], n.casefold()))
+        return [{"name": n, "count": totals[n], "students": people[n]} for n in names[:limit]]
+
+    busiest = None
+    if timed >= minimum and sum(weekdays):
+        day = max(range(7), key=lambda i: (weekdays[i], -i))
+        hour = max(range(24), key=lambda h: (hours[h], -h))
+        busiest = {"day": WEEKDAYS[day], "hour": _hour_label(hour),
+                   "weekdays": [{"day": WEEKDAYS[i], "count": weekdays[i]} for i in range(7)]}
+    spend = round(sum(s.get("total_spend") or 0 for s in students), 2)
+    record = max((s.get("caf_streak") or 0 for s in students), default=0)
+    return {
+        "students": len(students),
+        "spend": spend,
+        "avg_spend": round(spend / len(students), 2),
+        "visits": sum(s.get("visits") or 0 for s in students),
+        "caf_swipes": sum(s.get("caf_swipes") or 0 for s in students),
+        "top_items": ranked(item_orders, item_students, 5),
+        "top_spots": ranked(spot_visits, spot_students, 4),
+        "busiest": busiest,
+        "record_streak": record if record >= 2 else None,
     }

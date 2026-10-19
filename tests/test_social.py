@@ -1,8 +1,8 @@
 import unittest
 from datetime import datetime
 
-from social import (campus_percentiles, dining_badges, friend_match,
-                    signature_order, summary_highlights)
+from social import (campus_percentiles, campus_wrapped, dining_badges, dining_streaks,
+                    friend_match, signature_order, summary_highlights)
 
 
 class SocialInsightsTests(unittest.TestCase):
@@ -107,6 +107,33 @@ class SocialInsightsTests(unittest.TestCase):
             (summary["caf_swipes"], summary["flex_visits"], summary["flex_spend"]),
             (2, 3, 34),
         )
+
+    def test_streaks_count_consecutive_days_and_need_three(self):
+        meta = {"startdate": "2026-07-01"}
+        swipe = lambda day: {"date": f"Sep {day}, 2026 12:00PM", "location": "Commons PAX 4"}
+        buy = lambda day: {"date": f"Sep {day}, 2026 06:00PM", "location": "CFA 1", "grand_total": 5}
+        # Caf on 8-11 (4 days), a gap, Caf on 20-21; a Flex purchase on 12 extends the food streak.
+        swipes = [swipe(d) for d in (8, 9, 10, 11, 20, 21)] + [swipe(9)]
+        streaks = dining_streaks([buy(12)], swipes, meta)
+        self.assertEqual(streaks["caf"], {"days": 4, "span": "Sep 8–11"})
+        self.assertEqual(streaks["food"], {"days": 5, "span": "Sep 8–12"})
+        self.assertIsNone(dining_streaks([], [swipe(8), swipe(9)], meta))
+
+    def test_campus_wrapped_hides_anything_fewer_than_three_students_share(self):
+        def student(items, spots):
+            return {"total_spend": 10, "visits": 2, "caf_swipes": 3, "items": items, "spots": spots,
+                    "weekdays": [1, 0, 0, 0, 0, 0, 0], "hours": [0] * 12 + [1] + [0] * 11, "caf_streak": 2}
+        students = [student({"Taco": 2, "Rare Item": 9}, {"Tacos 4 Life": 2}) for _ in range(2)]
+        self.assertIsNone(campus_wrapped(students))
+        students.append(student({"Taco": 1}, {"Tacos 4 Life": 1}))
+        campus = campus_wrapped(students)
+        self.assertEqual(campus["students"], 3)
+        self.assertEqual([i["name"] for i in campus["top_items"]], ["Taco"])  # Rare Item: only 2 students
+        self.assertEqual(campus["top_items"][0]["count"], 5)
+        self.assertEqual(campus["busiest"]["day"], "Monday")
+        self.assertEqual(campus["busiest"]["hour"], "12 PM")
+        students[0].pop("weekdays")  # runs saved before activity was stored don't count toward it
+        self.assertIsNone(campus_wrapped(students)["busiest"])
 
 
 if __name__ == "__main__":

@@ -22,10 +22,21 @@
 <main class="landing">
   <i class="blob b1"></i><i class="blob b2"></i>
   <div class="landing-inner">
-    <p class="eyebrow">{% if vs_name %}{{ vs_name }} shared theirs. Your turn.{% else %}{{ semester_label }} is here{% endif %}</p>
+    <p class="eyebrow">{% if vs_name %}{{ vs_name }} shared theirs. Your turn.{% elif returning %}Welcome back{% if returning.first_name %}, {{ returning.first_name }}{% endif %}{% else %}{{ semester_label }} is here{% endif %}</p>
     <h1 class="display">OBU <br class="tall-only">STU<br>WRAPPED</h1>
-    <p class="lede">Your semester of CFA runs, Dr. Jack's lattes and Caf swipes, wrapped up.</p>
+    <p class="lede">{% if returning %}Your Flex guest login is saved, so one tap pulls in everything since last time.{% else %}Your semester of CFA runs, Dr. Jack's lattes and Caf swipes, wrapped up.{% endif %}</p>
 
+    {% if returning %}
+    <div class="returning">
+      <form method="POST" action="{{ url_for('start') }}">
+        <button type="submit" class="btn-primary cta">Update my Wrapped</button>
+      </form>
+      {% if returning.wrapped_url %}<a class="pill pill-light" href="{{ returning.wrapped_url }}">View my Wrapped</a>{% endif %}
+      <form method="POST" action="{{ url_for('switch_account') }}">
+        <button type="submit" class="link-button">Use a different account</button>
+      </form>
+    </div>
+    {% else %}
     <form method="POST" action="{{ url_for('start') }}">
       <ol class="steps">
         <li>
@@ -45,7 +56,8 @@
         </li>
       </ol>
     </form>
-    <p class="fine-print">Not affiliated with OBU or Sodexo.</p>
+    {% endif %}
+    <p class="fine-print"><a href="{{ url_for('campus_page') }}">Campus Wrapped</a> · Not affiliated with OBU or Sodexo.</p>
   </div>
 </main>
 {% endblock %}

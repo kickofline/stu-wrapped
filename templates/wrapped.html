@@ -194,6 +194,26 @@
     </div></section>
     {% endif %}
 
+    <!-- ── Streaks ───────────────────────────────────────────── -->
+    {% if streaks %}
+    {% set run = streaks.caf or streaks.food %}
+    <section class="slide t-blue l3"><div class="frame">
+      {{ blobs() }}
+      <div class="body center">
+        <p class="eyebrow">{% if streaks.caf %}Your longest Caf streak{% else %}Your longest streak{% endif %}</p>
+        <p class="display ac" style="--fs: 220">{{ run.days }}</p>
+        <p class="lead">days in a row{% if not streaks.caf %} eating on campus{% endif %}, {{ run.span }}.</p>
+        {% if streaks.caf and streaks.food.days > streaks.caf.days %}
+        <div class="panel">
+          <p class="panel-title">Eating on campus at all</p>
+          <p class="text">{{ streaks.food.days }} days in a row, {{ streaks.food.span }}.</p>
+        </div>
+        {% endif %}
+      </div>
+      {{ foot() }}
+    </div></section>
+    {% endif %}
+
     <!-- ── Flex left ─────────────────────────────────────────── -->
     {% if flex %}
     <section class="slide t-green l1"><div class="frame">

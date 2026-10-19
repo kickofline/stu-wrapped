@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Campus Wrapped · OBU Stu Wrapped{% endblock %}
+{% block robots %}index, follow, max-image-preview:large{% endblock %}
+
+{% block meta %}
+{% if campus %}
+{% set desc = "What " ~ campus.students ~ " OBU students ate this semester: the most-ordered items, busiest spots and the Caf's busiest time." %}
+{% else %}
+{% set desc = "What OBU ate this semester, from everyone's Stu Wrapped: top orders, busiest spots and the Caf's busiest time." %}
+{% endif %}
+{% set og_image = url_for('og_site', _external=True, _scheme='https') %}
+<meta name="theme-color" content="#2d46b9">
+<meta name="description" content="{{ desc }}">
+<link rel="canonical" href="{{ canonical }}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Campus Wrapped · {{ semester_label }}">
+<meta property="og:description" content="{{ desc }}">
+<meta property="og:url" content="{{ canonical }}">
+<meta property="og:image" content="{{ og_image }}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="OBU Stu Wrapped">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Campus Wrapped · {{ semester_label }}">
+<meta name="twitter:description" content="{{ desc }}">
+<meta name="twitter:image" content="{{ og_image }}">
+{% endblock %}
+
+{% macro money(value) %}${{ "{:,.2f}".format(value) }}{% endmacro %}
+
+{% block content %}
+<main class="compare-page campus-page">
+  <i class="blob b1"></i><i class="blob b2"></i>
+  <div class="compare-shell wide">
+    <a class="back-link" href="{{ url_for('index') }}">← Get your own Wrapped</a>
+    <p class="eyebrow">{{ semester_label }}</p>
+    <h1 class="display">CAMPUS<br>WRAPPED</h1>
+    {% if campus %}
+    <p class="compare-lead">What OBU ate this semester, from {{ campus.students }} students' Stu Wrapped.</p>
+
+    <div class="campus-stats">
+      <div class="card"><p class="card-label">Flex spent</p><strong>{{ money(campus.spend) }}</strong><p>{{ money(campus.avg_spend) }} per student</p></div>
+      <div class="card"><p class="card-label">Food visits</p><strong>{{ "{:,}".format(campus.visits) }}</strong><p>paid with Flex Bucks</p></div>
+      <div class="card"><p class="card-label">Caf swipes</p><strong>{{ "{:,}".format(campus.caf_swipes) }}</strong><p>meal swipes</p></div>
+      {% if campus.record_streak %}<div class="card"><p class="card-label">Longest Caf streak</p><strong>{{ campus.record_streak }}</strong><p>days in a row</p></div>{% endif %}
+    </div>
+
+    {% if campus.top_items %}
+    <section class="ranked-card card">
+      <p class="card-label">Most ordered</p>
+      <ol>{% for item in campus.top_items %}<li><span>{{ loop.index }}</span>{{ item.name }}<small>{{ "{:,}".format(item.count) }} orders</small></li>{% endfor %}</ol>
+    </section>
+    {% endif %}
+
+    {% if campus.top_spots %}
+    <section class="ranked-card card">
+      <p class="card-label">Busiest spots</p>
+      <ol>{% for spot in campus.top_spots %}<li><span>{{ loop.index }}</span>{{ spot.name }}<small>{{ "{:,}".format(spot.count) }} visits</small></li>{% endfor %}</ol>
+    </section>
+    {% endif %}
+
+    {% if campus.busiest %}
+    <section class="busiest-card card">
+      <p class="card-label">Busiest time</p>
+      <h2>{{ campus.busiest.day }}s around {{ campus.busiest.hour }}</h2>
+      {% set most = campus.busiest.weekdays | map(attribute='count') | max %}
+      <div class="week-bars">{% for w in campus.busiest.weekdays %}<div><i style="--h: {{ (w.count / (most or 1) * 100) | round(1) }}%"></i>{{ w.day[:3] }}</div>{% endfor %}</div>
+    </section>
+    {% endif %}
+    {% else %}
+    <p class="compare-lead">Campus Wrapped unlocks once 3 students have wrapped their semester. {% if wrapped_count %}{{ wrapped_count }} so far. Be next.{% else %}Be the first.{% endif %}</p>
+    {% endif %}
+
+    <div class="compare-actions"><a class="btn-primary" href="{{ url_for('index') }}">Get your own Wrapped →</a></div>
+  </div>
+</main>
+{% endblock %}

@@ -95,6 +95,9 @@ button { font: inherit; }
 .chip button { flex: none; background: var(--accent); color: var(--navy-lo); font-weight: 800; border: 0; border-radius: 10px; padding: .55rem .9rem; cursor: pointer; }
 .landing .cta { font-size: 1.25rem; padding: 1.1rem 2.2rem; }
 .fine-print { margin-top: clamp(.6rem, 2.2dvh, 2rem); color: var(--muted); font-size: .8rem; font-weight: 600; }
+.fine-print a { color: inherit; }
+.returning { display: flex; flex-direction: column; align-items: flex-start; gap: clamp(.8rem, 2.4dvh, 1.2rem); margin-top: clamp(1rem, 4dvh, 2.6rem); }
+.link-button { background: none; border: 0; padding: 0; color: var(--muted); font: 700 .95rem var(--font); text-decoration: underline; cursor: pointer; }
 /* Short screens (phones with browser toolbars, small laptops): tighter type, two-line title. */
 @media (max-height: 760px) {
   .tall-only { display: none; }
@@ -184,10 +187,24 @@ body:has(.compare-page):has(.flash) .compare-shell { padding-top: 6.5rem; }
 .caf-buddy li { border-radius: 999px; padding: .4rem .65rem; background: rgba(0,0,0,.09); font-weight: 800; }
 .caf-buddy small { display: block; margin-top: 1rem; font-weight: 700; opacity: .68; }
 .shared-card { margin-top: 1rem; }
-.shared-card ol { list-style: none; display: grid; gap: .7rem; margin-top: .8rem; }
-.shared-card li { display: flex; align-items: center; gap: .65rem; font-family: var(--display); font-size: clamp(1.25rem, 4vw, 2rem); line-height: 1.05; }
-.shared-card li span { flex: none; display: inline-flex; width: 1.8rem; height: 1.8rem; align-items: center; justify-content: center; border-radius: 50%; background: #ffe14d; color: #2a0f00; font: 800 .85rem var(--font); }
+.shared-card ol, .ranked-card ol { list-style: none; display: grid; gap: .7rem; margin-top: .8rem; }
+.shared-card li, .ranked-card li { display: flex; align-items: center; gap: .65rem; font-family: var(--display); font-size: clamp(1.25rem, 4vw, 2rem); line-height: 1.05; }
+.shared-card li span, .ranked-card li span { flex: none; display: inline-flex; width: 1.8rem; height: 1.8rem; align-items: center; justify-content: center; border-radius: 50%; background: #ffe14d; color: #2a0f00; font: 800 .85rem var(--font); }
 .compare-actions { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: 1.2rem; }
+
+/* ── Campus Wrapped ────────────────────────────────────────── */
+.campus-page { background: #2d46b9; }
+.campus-page .blob.b1 { background: #4762d6; }
+.campus-page .blob.b2 { background: #22389a; }
+.campus-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; margin: 1.6rem 0 1rem; }
+.campus-stats strong { display: block; font-family: var(--display); font-size: clamp(2rem, 6vw, 2.8rem); line-height: 1; color: var(--lime); margin: .5rem 0 .3rem; }
+.campus-stats p:last-child { font-weight: 700; color: rgba(255,255,255,.72); }
+.ranked-card, .busiest-card { margin-top: 1rem; }
+.ranked-card li small { margin-left: auto; font: 700 .95rem var(--font); opacity: .72; white-space: nowrap; }
+.busiest-card h2 { font-family: var(--display); font-size: clamp(1.6rem, 5vw, 2.4rem); line-height: 1.05; margin: .5rem 0 1rem; color: var(--lime); }
+.week-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: .5rem; height: 120px; }
+.week-bars div { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: .35rem; font-weight: 800; font-size: .85rem; }
+.week-bars i { width: 100%; height: var(--h); min-height: 4px; background: var(--lime); border-radius: 6px; }
 
 @media (max-width: 620px) {
   .invite-card { align-items: flex-start; flex-direction: column; }
