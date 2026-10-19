@@ -1,3 +1,4 @@
+import hashlib
 import hmac
 import json
 import os
@@ -10,11 +11,12 @@ from datetime import date, datetime, timedelta
 
 from dotenv import load_dotenv
 from flask import (Flask, Response, abort, flash, jsonify, redirect,
-                   render_template, request, url_for)
+                   render_template, request, send_file, url_for)
 
 load_dotenv()
 
 import analysis
+import og_image
 from insights import parse_when, spot_name, time_insights
 from jobs import (active_job_for, claim, claim_waiting, cleanup_old_jobs,
                   create_job, fail, finish, get_job, update_progress)
@@ -32,6 +34,8 @@ DATA_DIR       = os.path.join(os.path.dirname(__file__), "data")
 STATS_FILE     = os.path.join(DATA_DIR, "stats.json")
 RAW_ITEMS_FILE = os.path.join(DATA_DIR, "raw_items.json")
 RESULTS_DIR    = os.path.join(DATA_DIR, "results")
+OG_DIR         = os.path.join(DATA_DIR, "og")  # rendered link-preview images, one per share link
+ARCHIVE_DIR    = os.path.join(DATA_DIR, "archive")  # every scrape, raw + parsed, kept forever
 
 INBOX_COOKIE = "inbox"
 _SHARE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{12}$")
@@ -40,18 +44,6 @@ _stats_lock = threading.Lock()
 
 def _log(*args):
     print(*args, flush=True)
-
-
-def _location_stats(transactions: list, keywords: tuple) -> tuple:
-    """Sum qty and spend for transactions whose location matches any keyword."""
-    qty = 0
-    spend = 0.0
-    for tx in transactions:
-        if any(k in tx["location"].lower() for k in keywords):
-            for item in tx["items"]:
-                qty += item["qty"]
-                spend += item.get("subtotal") or 0.0
-    return qty, round(spend, 2)
 
 
 def _aggregate_items(transactions: list) -> list[dict]:
@@ -91,17 +83,30 @@ def _aggregate_items(transactions: list) -> list[dict]:
 
 
 def _load_stats() -> dict:
+    """Campus-wide comparison stats: {"students": {student_key: latest run summary}}.
+    Keyed per student so re-running replaces that student's numbers instead of
+    counting them again."""
     try:
         with open(STATS_FILE, encoding="utf-8") as f:
-            return json.load(f)
+            stats = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
-        return {"total_runs": 0, "all_total_qtys": [], "all_total_spends": [], "all_unique_items": [], "top_items": {}}
+        stats = {}
+    stats.setdefault("students", {})
+    return stats
 
 
 def _save_stats(stats: dict) -> None:
     os.makedirs(os.path.dirname(STATS_FILE), exist_ok=True)
-    with open(STATS_FILE, "w", encoding="utf-8") as f:
+    with open(STATS_FILE + ".tmp", "w", encoding="utf-8") as f:
         json.dump(stats, f, indent=2)
+    os.replace(STATS_FILE + ".tmp", STATS_FILE)
+
+
+def _student_key(invite: dict, tag: str) -> str:
+    """Stable, non-identifying key for one student: the account holder's name from
+    the invite (same across browsers and re-invites), else the inbox tag."""
+    name = " ".join((invite.get("name") or "").lower().split())
+    return hashlib.sha256((name or f"inbox:{tag}").encode()).hexdigest()[:16]
 
 
 def _record_raw_items(transactions: list) -> None:
@@ -122,19 +127,19 @@ def _record_raw_items(transactions: list) -> None:
         json.dump(sorted(known_set, key=str.lower), f, indent=2)
 
 
-def _record_run(transactions: list) -> None:
-    """Add one finished run to the campus-wide comparison stats."""
+def _record_run(transactions: list, student_key: str) -> None:
+    """Store this student's latest run in the campus-wide comparison stats."""
     items = _aggregate_items(transactions)
     with _stats_lock:
         _record_raw_items(transactions)
         stats = _load_stats()
-        stats["total_runs"] += 1
-        stats["all_total_qtys"].append(sum(i["qty"] for i in items))
-        stats.setdefault("all_total_spends", []).append(round(sum(i["total_spend"] for i in items), 2))
-        stats["all_unique_items"].append(len(items))
-        if items:
-            top = items[0]["name"]
-            stats["top_items"][top] = stats["top_items"].get(top, 0) + 1
+        stats["students"][student_key] = {
+            "total_qty": sum(i["qty"] for i in items),
+            "total_spend": round(sum(i["total_spend"] for i in items), 2),
+            "unique_items": len(items),
+            "top_item": items[0]["name"] if items else None,
+            "updated": datetime.now().isoformat(timespec="seconds"),
+        }
         _save_stats(stats)
 
 
@@ -219,7 +224,7 @@ def _start_job(job_id: str, tag: str, invite: dict) -> None:
 def _run_job(job_id: str, tag: str, invite: dict) -> None:
     startdate, enddate, label = _semester_dates()
     try:
-        transactions, swipes, balances = fetch_activity(
+        transactions, swipes, balances, pages = fetch_activity(
             invite["username"], invite["password"], startdate, enddate,
             progress=lambda step, msg: update_progress(job_id, step, msg),
         )
@@ -243,6 +248,8 @@ def _run_job(job_id: str, tag: str, invite: dict) -> None:
         return
 
     _log(f"[job {job_id}] fetched {len(transactions)} purchases, {len(swipes)} meal swipes")
+    student = _student_key(invite, tag)
+    _archive_run(job_id, tag, student, invite, transactions, swipes, balances, pages)
     if not transactions and not swipes:
         fail(job_id, f"We didn't find any Flex Bucks purchases or meal swipes for {label}. "
                      "If you're not on a meal plan, there's nothing to wrap yet!")
@@ -253,6 +260,8 @@ def _run_job(job_id: str, tag: str, invite: dict) -> None:
         "startdate": startdate, "enddate": enddate,
         "name": invite.get("name"),
         "balances": balances,
+        "student_key": student,
+        "run_id": job_id,
     }
     ai = None
     if analysis.enabled():
@@ -265,8 +274,22 @@ def _run_job(job_id: str, tag: str, invite: dict) -> None:
 
     update_progress(job_id, 6, "Wrapping it up...")
     share_id = _save_result(transactions, swipes, metadata, ai)
-    _record_run(transactions)
+    _record_run(transactions, student)
     finish(job_id, share_id)
+
+
+def _archive_run(job_id, tag, student, invite, transactions, swipes, balances, pages) -> None:
+    """Keep everything every scrape returned, forever, for later analytics: the raw
+    statement HTML per account plus what we parsed from it. One file per run, never
+    rewritten, so re-runs and re-parses can be compared over time. No passwords."""
+    os.makedirs(ARCHIVE_DIR, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    with open(os.path.join(ARCHIVE_DIR, f"{stamp}-{job_id}.json"), "w", encoding="utf-8") as f:
+        json.dump({
+            "run_id": job_id, "archived_at": stamp, "inbox": tag, "student_key": student,
+            "name": invite.get("name"), "guest_login": invite.get("username"),
+            "balances": balances, "purchases": transactions, "swipes": swipes, "pages": pages,
+        }, f)
 
 
 def _summary(transactions: list, swipes: list, metadata: dict, label: str) -> dict:
@@ -309,7 +332,7 @@ def index():
     tag = request.cookies.get(INBOX_COOKIE)
     if not is_tag(tag):
         tag = new_tag()
-    resp = Response(render_template("index.html", plus_address=plus_address(tag)))
+    resp = Response(render_template("index.html", plus_address=plus_address(tag), semester_label=_semester_dates()[2]))
     resp.set_cookie(INBOX_COOKIE, tag, max_age=365 * 24 * 3600, httponly=True, samesite="Lax",
                     secure=request.is_secure or request.headers.get("X-Forwarded-Proto") == "https")
     return resp
@@ -399,77 +422,94 @@ def results(share_id):
     )
 
 
-@app.get("/wrapped/<share_id>")
-def wrapped(share_id):
+def _wrapped_context(share_id: str) -> dict:
+    """Everything the slides, the share cards and the link preview show."""
     result = _load_result(share_id)
     transactions = result["transactions"]
     meta = result["metadata"]
-    all_items = _aggregate_items(transactions)
-    top_items = all_items[:3]
-    total_qty = sum(i["qty"] for i in all_items)
-    total_spend = round(sum(i["total_spend"] for i in all_items), 2)
-    unique_items = len(all_items)
+    items = _aggregate_items(transactions)
+    total_qty = sum(i["qty"] for i in items)
+    total_spend = round(sum(i["total_spend"] for i in items), 2)
 
-    # ── Weekly rate ──────────────────────────────────────────
-    try:
-        start = date.fromisoformat(meta["startdate"])
-        end   = date.fromisoformat(meta["enddate"])
-        weeks = max(1, (end - start).days / 7)
-    except Exception:
-        weeks = 16
-    items_per_week = round(total_qty / weeks, 1)
+    start = date.fromisoformat(meta["startdate"])
+    semester_label = f"{'Spring' if start.month <= 6 else 'Fall'} {start.year}"
+    times = time_insights(transactions, meta["startdate"], meta["enddate"])
+    swipes = time_insights(result.get("swipes", []), meta["startdate"], meta["enddate"])
+    all_spots = next((g["top"] for g in (times or {}).get("spots", []) if g["meal"] == "All visits"), [])
 
-    # ── Per-location stats (keyed on transaction location name) ─
-    cfa_qty,     cfa_spend     = _location_stats(transactions, ("cfa",))
-    tacos_qty,   tacos_spend   = _location_stats(transactions, ("taco",))
-    drjacks_qty, drjacks_spend = _location_stats(transactions, ("dr jack", "dr. jack", "drjack"))
+    # Compare against every student's latest run (only meaningful once others have run).
+    students = list(_load_stats()["students"].values())
+    compare = None
+    if len(students) >= 2:
+        qtys = [s["total_qty"] for s in students]
+        tops = [s["top_item"] for s in students if s["top_item"]]
+        compare = {
+            "pct_rank": round(len([q for q in qtys if q < total_qty]) / len(qtys) * 100),
+            "avg_qty": round(sum(qtys) / len(qtys)),
+            "avg_spend": round(sum(s["total_spend"] for s in students) / len(students), 2),
+            "runs": len(students),
+            "most_common_top": max(set(tops), key=tops.count) if tops else None,
+        }
 
-    # ── Compare against every finished run ──────────────────
-    stats = _load_stats()
-    qtys   = stats["all_total_qtys"]
-    spends = stats.get("all_total_spends", [])
-    pct_rank       = round(len([q for q in qtys if q < total_qty]) / len(qtys) * 100) if qtys else None
-    avg_qty        = round(sum(qtys) / len(qtys)) if qtys else None
-    avg_spend      = round(sum(spends) / len(spends), 2) if spends else None
-    total_all_spend = round(sum(spends), 2) if spends else None
-    most_common_top = max(stats["top_items"], key=stats["top_items"].get) if stats["top_items"] else None
+    name = meta.get("name") or ""
+    return {
+        "share_id": share_id,
+        "student_name": name,
+        "first_name": name.split()[0] if name else "",
+        "semester_label": semester_label,
+        "season": semester_label.split()[0],
+        "year": start.year,
+        "visits": len(transactions),
+        "total_qty": total_qty,
+        "total_spend": total_spend,
+        "unique_items": len(items),
+        "items": items[:5],
+        "top_spots": all_spots,
+        "times": times,
+        "swipes": swipes,
+        "swipe_top_meal": max(swipes["meal_totals"], key=lambda m: m["count"])["meal"] if swipes else None,
+        "flex": _flex_plan(transactions, meta),
+        "ai": result.get("analysis"),
+        "compare": compare,
+    }
 
-    # Semester label from stored metadata start date
-    try:
-        start_month = date.fromisoformat(meta["startdate"]).month
-        start_year  = date.fromisoformat(meta["startdate"]).year
-        semester_label = f"Spring {start_year}" if start_month <= 6 else f"Fall {start_year}"
-    except Exception:
-        semester_label = "This Semester"
 
+@app.get("/wrapped/<share_id>")
+def wrapped(share_id):
+    ctx = _wrapped_context(share_id)
     return render_template(
         "wrapped.html",
-        items=top_items,
-        metadata=meta,
-        student_name=meta.get("name"),
-        total_qty=total_qty,
-        total_spend=total_spend,
-        unique_items=unique_items,
-        items_per_week=items_per_week,
-        cfa_qty=cfa_qty,
-        cfa_spend=cfa_spend,
-        tacos_qty=tacos_qty,
-        tacos_spend=tacos_spend,
-        drjacks_qty=drjacks_qty,
-        drjacks_spend=drjacks_spend,
-        times=time_insights(transactions, meta["startdate"], meta["enddate"]),
-        swipes=time_insights(result.get("swipes", []), meta["startdate"], meta["enddate"]),
-        flex=_flex_plan(transactions, meta),
-        ai=result.get("analysis"),
-        total_runs=stats["total_runs"],
-        pct_rank=pct_rank,
-        avg_qty=avg_qty,
-        avg_spend=avg_spend,
-        total_all_spend=total_all_spend,
-        most_common_top=most_common_top,
-        semester_label=semester_label,
+        **ctx,
         dashboard_url=url_for("results", share_id=share_id),
+        share_url=url_for("wrapped", share_id=share_id, _external=True, _scheme="https"),
+        og_image=url_for("og_result", share_id=share_id, _external=True, _scheme="https"),
     )
+
+
+@app.get("/og/<share_id>.png")
+def og_result(share_id):
+    ctx = _wrapped_context(share_id)
+    path = os.path.join(OG_DIR, f"{share_id}.png")
+    if not os.path.exists(path):
+        os.makedirs(OG_DIR, exist_ok=True)
+        subtitle = " · ".join(filter(None, [
+            ctx["ai"]["personality"]["title"] if ctx["ai"] else None,
+            f"{ctx['swipes']['count']} Caf swipes" if ctx["swipes"] else None,
+            f"${ctx['total_spend']:,.2f} on Flex" if ctx["total_spend"] else None,
+        ]))
+        heading = f"{ctx['first_name']}'s {ctx['semester_label']}" if ctx["first_name"] else ctx["semester_label"]
+        og_image.render(path, heading, subtitle)
+    return send_file(path, mimetype="image/png", max_age=86400)
+
+
+@app.get("/og/site.png")
+def og_site():
+    label = _semester_dates()[2]
+    path = os.path.join(OG_DIR, f"site-{label.replace(' ', '-')}.png")
+    if not os.path.exists(path):
+        os.makedirs(OG_DIR, exist_ok=True)
+        og_image.render(path, label, "Your semester of CFA runs, Dr. Jack's lattes and Caf swipes")
+    return send_file(path, mimetype="image/png", max_age=86400)
 
 
 @app.get("/api/results/<share_id>")

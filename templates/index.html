@@ -1,49 +1,34 @@
 {% extends "base.html" %}
 
-{% block title %}OBU Stu Wrapped — See your semester in snacks{% endblock %}
+{% block title %}OBU Stu Wrapped — your semester in food{% endblock %}
 
 {% block content %}
-<main class="hero">
-  <div class="hero__inner">
-    <h1 class="hero__title">OBU Stu Wrapped</h1>
-    <p class="hero__tagline">See your semester in snacks</p>
+<main class="landing">
+  <i class="blob b1"></i><i class="blob b2"></i>
+  <div class="landing-inner">
+    <p class="eyebrow">{{ semester_label }} is here</p>
+    <h1 class="display">OBU<br>STU<br>WRAPPED</h1>
+    <p class="lede">Your semester of CFA runs, Dr. Jack's lattes and Caf swipes, wrapped up.</p>
 
-    <form class="card form-card" method="POST" action="{{ url_for('start') }}" id="start-form">
-      <h2 class="form-card__heading">Get started</h2>
-
-      <div class="steps-list">
-        <div class="step-item">
-          <span class="step-num">1</span>
-          <div class="step-body">
-            <p class="step-desc">Copy your personal Stu Wrapped email:</p>
-            <div class="plus-address-row" style="margin-top: 0.75rem;">
-              <code class="plus-address-code" id="plus-addr-text">{{ plus_address }}</code>
-              <button type="button" class="btn-copy" id="copy-btn" onclick="copyAddr()">Copy</button>
-            </div>
+    <form method="POST" action="{{ url_for('start') }}">
+      <ol class="steps">
+        <li>
+          <p class="eyebrow">1 · Copy your email</p>
+          <div class="chip">
+            <code id="plus-addr-text">{{ plus_address }}</code>
+            <button type="button" id="copy-btn" onclick="copyAddr(this)">Copy</button>
           </div>
-        </div>
-        <div class="step-item">
-          <span class="step-num">2</span>
-          <div class="step-body">
-            <p class="step-desc">Add it as a guest on your Flex Bucks account so we can read your dining history. <br><em>This doesn't give us access to anything but your transaction history. <b>We can't spend your Flex Bucks.</b></em></p>
-            <a href="https://connectobu.atriumcampus.com/guestaccess.php"
-               target="_blank" rel="noopener" class="btn-secondary btn-sm">
-              Open Flex Bucks ↗
-            </a>
-            <p class="email-hint">⚠ Only works if you're on a meal plan with Flex Bucks.</p>
-          </div>
-        </div>
-        <div class="step-item">
-          <span class="step-num">3</span>
-          <div class="step-body">
-            <p class="step-desc">Hit <strong>Generate</strong>. We'll start as soon as the Flex Bucks invite reaches us, and next time it's instant.</p>
-          </div>
-        </div>
-      </div>
-
-      <button type="submit" class="btn-primary" style="margin-top: 1.5rem;" id="submit-btn">
-        Generate My Wrapped <span class="btn-arrow">→</span>
-      </button>
+        </li>
+        <li>
+          <p class="eyebrow">2 · Add it as a Flex Bucks guest</p>
+          <p class="note">View-only: we can't spend your Flex. Needs a meal plan.</p>
+          <a class="pill pill-light" href="https://connectobu.atriumcampus.com/guestaccess.php" target="_blank" rel="noopener">Open Flex Bucks ↗</a>
+        </li>
+        <li>
+          <p class="eyebrow">3 · Get your Wrapped</p>
+          <button type="submit" class="btn-primary cta">Generate mine</button>
+        </li>
+      </ol>
     </form>
   </div>
 </main>
@@ -51,12 +36,11 @@
 
 {% block scripts %}
 <script>
-  function copyAddr() {
+  function copyAddr(btn) {
     const text = document.getElementById('plus-addr-text').textContent.trim();
-    navigator.clipboard.writeText(text).then(function() {
-      const btn = document.getElementById('copy-btn');
+    navigator.clipboard.writeText(text).then(function () {
       btn.textContent = 'Copied!';
-      setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+      setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
     });
   }
 </script>

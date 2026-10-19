@@ -2,19 +2,22 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>{% block title %}OBU Stu Wrapped{% endblock %}</title>
+  {% block meta %}
+  <meta name="theme-color" content="#1e3264">
+  <meta name="description" content="Your semester of CFA runs, Dr. Jack's lattes and Caf swipes, wrapped up.">
+  <meta property="og:title" content="OBU Stu Wrapped">
+  <meta property="og:description" content="Your semester of CFA runs, Dr. Jack's lattes and Caf swipes, wrapped up.">
+  <meta property="og:image" content="{{ url_for('og_site', _external=True, _scheme='https') }}">
+  <meta name="twitter:card" content="summary_large_image">
+  {% endblock %}
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="preload" href="{{ url_for('static', filename='fonts/ArchivoBlack-Regular.ttf') }}" as="font" type="font/ttf" crossorigin>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
   {% block extra_css %}{% endblock %}
 </head>
 <body>
-
-<nav class="top-nav">
-  <a href="{{ url_for('index') }}" class="nav-logo">OBU Stu Wrapped</a>
-</nav>
 
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}

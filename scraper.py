@@ -123,11 +123,12 @@ def list_accounts(session: requests.Session, skey: str) -> list[tuple[str, str]]
 
 
 def fetch_activity(username, password, startdate, enddate, progress=lambda step, msg: None):
-    """Log in and return (purchases, swipes, balances) between startdate and enddate (ISO dates)
-    across every account the guest can see. Meal-plan accounts ("Resident Meals")
-    have no itemized receipts; each -1 row there is a dining-hall swipe. balances maps
-    account name to its current balance, e.g. {"Resident Flex": 249.07}."""
-    purchases, swipes, balances = [], [], {}
+    """Log in and return (purchases, swipes, balances, pages) between startdate and enddate
+    (ISO dates) across every account the guest can see. Meal-plan accounts ("Resident
+    Meals") have no itemized receipts; each -1 row there is a dining-hall swipe. balances
+    maps account name to its current balance, e.g. {"Resident Flex": 249.07}; pages is
+    each account's raw statement HTML ([{account, acct, html}]) for archiving."""
+    purchases, swipes, balances, pages = [], [], {}, []
     with requests.Session() as session:
         session.headers["User-Agent"] = USER_AGENT
         progress(2, "Logging in to Flex Bucks...")
@@ -143,6 +144,7 @@ def fetch_activity(username, password, startdate, enddate, progress=lambda step,
                 resp.raise_for_status()
                 if _login_form(resp.text) is not None:
                     raise RuntimeError("Atrium sent the statement request back to the login page")
+                pages.append({"account": name, "acct": acct, "html": resp.text.replace(skey, "SKEY")})
                 balance = parse_balance(resp.text)
                 if balance is not None:
                     balances[name] = balance
@@ -154,7 +156,7 @@ def fetch_activity(username, password, startdate, enddate, progress=lambda step,
             logout(session, skey)
 
     progress(4, "Parsing your food data...")
-    return purchases, swipes, balances
+    return purchases, swipes, balances, pages
 
 
 def parse_balance(html) -> float | None:

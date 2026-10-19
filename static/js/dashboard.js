@@ -11,9 +11,7 @@ new Chart(ctx, {
     datasets: [{
       label: 'Times Ordered',
       data: top15.map(i => i.qty),
-      backgroundColor: top15.map((_, idx) =>
-        `hsl(${355 - idx * 7}, 70%, ${48 + idx * 1.2}%)`
-      ),
+      backgroundColor: '#f4ff5c',
       borderRadius: 6,
       borderSkipped: false,
     }],
@@ -32,12 +30,12 @@ new Chart(ctx, {
     },
     scales: {
       x: {
-        grid: { color: 'rgba(255,255,255,0.05)' },
-        ticks: { color: '#8a9ba8', font: { family: 'Space Grotesk' } },
+        grid: { color: 'rgba(255,255,255,0.08)' },
+        ticks: { color: 'rgba(255,255,255,0.7)', font: { family: 'Inter Tight', weight: 700 } },
       },
       y: {
         grid: { display: false },
-        ticks: { color: '#f1faee', font: { family: 'Space Grotesk', size: 13 } },
+        ticks: { color: '#ffffff', font: { family: 'Inter Tight', size: 13, weight: 700 } },
       },
     },
   },

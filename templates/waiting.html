@@ -1,38 +1,36 @@
 {% extends "base.html" %}
 
-{% block title %}OBU Stu Wrapped — Generating…{% endblock %}
+{% block title %}OBU Stu Wrapped — hang tight{% endblock %}
+{% block meta %}<meta name="theme-color" content="#f037a5">{% endblock %}
 
 {% block content %}
 <main class="waiting-page">
+  <i class="blob b1"></i><i class="blob b2"></i>
   <div class="waiting-inner">
-
     <div class="spinner" id="spinner"></div>
+    <h1 class="display">Hang<br>tight…</h1>
 
     <p class="waiting-status" id="status-msg">{{ job.message }}</p>
-
     <div class="progress-track">
-      <div class="progress-fill" id="progress-fill"
-           style="width: {{ (job.step / job.total_steps * 100) | int }}%"></div>
+      <div class="progress-fill" id="progress-fill" style="width: {{ (job.step / job.total_steps * 100) | int }}%"></div>
     </div>
-
-    <p class="waiting-step">
-      Step <span id="step-num">{{ job.step }}</span> of {{ job.total_steps }}
-    </p>
+    <p class="waiting-step">Step <span id="step-num">{{ job.step }}</span> of {{ job.total_steps }}</p>
 
     <!-- Shown while we wait for the Flex Bucks invite -->
     <div class="waiting-hint" id="waiting-hint"{% if job.status != 'waiting' %} style="display:none"{% endif %}>
-      <p>Haven't added us yet? Add this guest email in Flex Bucks and keep this page open:</p>
-      <code class="plus-address-code">{{ plus_address }}</code>
-      <p><a href="https://connectobu.atriumcampus.com/guestaccess.php" target="_blank" rel="noopener">Open Flex Bucks ↗</a></p>
+      <p>Haven't added us yet? Add this guest email in Flex Bucks and keep this page open — it starts the second the invite lands.</p>
+      <div class="chip">
+        <code id="plus-addr-text">{{ plus_address }}</code>
+        <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('plus-addr-text').textContent.trim()); this.textContent='Copied!'">Copy</button>
+      </div>
+      <a class="pill pill-light" href="https://connectobu.atriumcampus.com/guestaccess.php" target="_blank" rel="noopener">Open Flex Bucks ↗</a>
     </div>
 
-    <!-- Error box (hidden until error) -->
     <div class="error-box" id="error-box" style="display:none">
       <strong>Something went wrong</strong>
       <p id="error-msg"></p>
-      <a href="{{ url_for('index') }}" class="btn-secondary">Start over</a>
+      <a href="{{ url_for('index') }}" class="btn-primary">Start over</a>
     </div>
-
   </div>
 </main>
 {% endblock %}

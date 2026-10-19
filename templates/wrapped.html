@@ -1,323 +1,282 @@
 {% extends "base.html" %}
-{% block title %}{% if student_name %}{{ student_name }}'s{% else %}Your{% endif %} OBU Stu Wrapped{% endblock %}
+{% block title %}{% if first_name %}{{ first_name }}'s{% else %}Your{% endif %} OBU Stu Wrapped · {{ semester_label }}{% endblock %}
+
+{% block meta %}
+{% set og_title = (first_name ~ "'s OBU Stu Wrapped") if first_name else "OBU Stu Wrapped" %}
+{% set og_desc = (ai.personality.title ~ " · ") if ai else "" %}
+<meta name="theme-color" content="#1e3264">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{ og_title }} · {{ semester_label }}">
+<meta property="og:description" content="{{ og_desc }}See their semester in food, then get yours.">
+<meta property="og:url" content="{{ share_url }}">
+<meta property="og:image" content="{{ og_image }}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="{{ og_image }}">
+{% endblock %}
+
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/wrapped.css') }}">
 {% endblock %}
 
-{% macro clock_slide(t, early, late) %}
-  <div class="slide slide-clock">
-    <div class="clock-half clock-early">
-      <p class="cfa-logo">🐛</p>
-      <p class="clock-label">{{ early }}</p>
-      <p class="clock-time">{{ t.earliest.time }} at {{ t.earliest.location }}</p>
-      <p class="clock-date">{{ t.earliest.date }}</p>
-    </div>
-    <div class="clock-half clock-late">
-      <p class="cfa-logo">🦉</p>
-      <p class="clock-label">{{ late }}</p>
-      <p class="clock-time">{{ t.latest.time }} at {{ t.latest.location }}</p>
-      <p class="clock-date">{{ t.latest.date }}</p>
-    </div>
-  </div>
-{% endmacro %}
-
-{# field: "avg" (average per weekday) or "total" (count per weekday) #}
-{% macro weekday_slide(t, title, field) %}
-  <div class="slide slide-weekdays">
-    <h2 class="chart-title">{{ title }}</h2>
-    {% set top = t.weekdays | map(attribute=field) | max %}
-    {% for w in t.weekdays %}
-    <div class="bar-row">
-      <span class="bar-label">{{ w.day }}</span>
-      <span class="bar" style="--w: {{ (w[field] / (top or 1) * 100) | round(1) }}%"></span>
-      <span class="bar-value">{{ w[field] }}</span>
-    </div>
-    {% endfor %}
-  </div>
-{% endmacro %}
+{% macro foot(text="wrapped.drew.place") %}<p class="foot">{{ text }}</p>{% endmacro %}
+{% macro blobs() %}<i class="blob b1"></i><i class="blob b2"></i>{% endmacro %}
+{% macro money(v) %}${{ "{:,.2f}".format(v) }}{% endmacro %}
 
 {% block content %}
+<div class="viewer">
+  <div class="stage" id="stage">
+    <div class="progress" id="progress"></div>
 
-<div class="wrapped-container">
-
-  <!-- Dashboard shortcut (always visible) -->
-  <a href="{{ dashboard_url }}" class="wrapped-dash-btn">Dashboard ↗</a>
-
-  <!-- Dot navigation (filled in by wrapped.js, one per slide) -->
-  <div class="nav-dots" id="nav-dots"></div>
-
-  <!-- ── Intro ─────────────────────────────────────────────── -->
-  <div class="slide slide-intro active">
-    {% if student_name %}<p class="intro-name">{{ student_name }}'s</p>{% endif %}
-    <p class="intro-eyebrow">{{ semester_label }}</p>
-    <h1 class="intro-title">OBU Stu<br>Wrapped</h1>
-    <p class="intro-hint">Tap · swipe · or press →</p>
-    <div class="outro-links">
-      <button class="btn-secondary js-share">Share 🔗</button>
-      <a href="{{ url_for('index') }}" class="btn-secondary">Get your own</a>
-    </div>
-  </div>
-
-  <!-- ── Money Spent ───────────────────────────────────────── -->
-  <div class="slide slide-spend">
-    <p class="stats-label">This semester you spent</p>
-    <p class="stats-big spend-big">${{ "%.2f"|format(total_spend) }}</p>
-    <p class="stats-label">on campus dining</p>
-  </div>
-
-  {% if flex %}
-  <!-- ── Flex left + what it takes to use it up ─────────────── -->
-  <div class="slide slide-flex">
-    <p class="stats-label">You still have</p>
-    <p class="stats-big">${{ "%.2f"|format(flex.balance) }}</p>
-    <p class="stats-label">in Flex Bucks</p>
-    <p class="stats-divider">—</p>
-    <p class="stats-sub">To use it all by {{ flex.end }} ({{ flex.days_left }} days), spend
-      <strong>${{ "%.2f"|format(flex.per_week) }}</strong> a week
-      (<strong>${{ "%.2f"|format(flex.per_day) }}</strong> a day)</p>
-    {% if flex.pace_per_week is not none %}
-    <p class="stats-sub flex-pace">
-      You've been spending <strong>${{ "%.2f"|format(flex.pace_per_week) }}</strong> a week.
-      {% if flex.runs_out %}At that pace you'll run out around <strong>{{ flex.runs_out }}</strong>.
-      {% else %}At that pace you'll finish with <strong>${{ "%.2f"|format(flex.projected_left) }}</strong> left.{% endif %}
-    </p>
-    {% endif %}
-  </div>
-  {% endif %}
-
-  <!-- ── Total + weekly rate ───────────────────────────────── -->
-  <div class="slide slide-stats">
-    <p class="stats-label">You ordered</p>
-    <p class="stats-big">{{ total_qty }}</p>
-    <p class="stats-label">items this semester</p>
-    <p class="stats-divider">—</p>
-    <p class="stats-sub">That's <strong>{{ items_per_week }}</strong> items every week</p>
-  </div>
-
-  <!-- ── Variety ──────────────────────────────────────────── -->
-  <div class="slide slide-variety">
-    <p class="variety-pre">You tried</p>
-    <p class="stats-big variety-num">{{ unique_items }}</p>
-    <p class="variety-post">unique dishes</p>
-    {% if unique_items >= 30 %}
-      <p class="variety-badge">🧭 Adventurous eater</p>
-    {% elif unique_items >= 15 %}
-      <p class="variety-badge">🍽️ Well-rounded</p>
-    {% else %}
-      <p class="variety-badge">🎯 Creature of habit</p>
-    {% endif %}
-  </div>
-
-  <!-- ── Top items ─────────────────────────────────────────── -->
-  {% set colors = ["#c1121f","#1d3557","#2a9d8f","#7b2d8b","#e76f51","#264653","#0096c7","#6d6875","#b5838d","#588157"] %}
-  {% for item in items %}
-  <div class="slide slide-item"
-       style="--slide-color: {{ colors[(loop.index0) % colors|length] }};">
-    <span class="rank-number">#{{ item.rank }}</span>
-    <h2 class="item-name">{{ item.name }}</h2>
-    <p class="item-subtitle">
-      ordered <strong>{{ item.qty }}</strong> time{{ 's' if item.qty != 1 else '' }}
-      &nbsp;·&nbsp; <strong>${{ "%.2f"|format(item.total_spend) }}</strong> spent
-    </p>
-    {% if loop.first %}
-      <p class="item-badge">Your #1 obsession 🏆</p>
-    {% elif loop.index == 2 %}
-      <p class="item-badge">Close second 🥈</p>
-    {% elif loop.index == 3 %}
-      <p class="item-badge">Reliable go-to 🥉</p>
-    {% endif %}
-  </div>
-  {% endfor %}
-
-  {% if ai %}
-  <!-- ── Personalized: dining personality ──────────────────── -->
-  <div class="slide slide-ai slide-personality">
-    <p class="stats-label">Your dining personality</p>
-    <h2 class="ai-title">{{ ai.personality.title }}</h2>
-    <p class="ai-text">{{ ai.personality.description }}</p>
-  </div>
-  {% endif %}
-
-  {% if times %}
-  <!-- ── Favorite spots by meal ────────────────────────────── -->
-  <div class="slide slide-spots">
-    <h2 class="chart-title">Your favorite spots</h2>
-    {% for group in times.spots %}
-    <section class="chart-group">
-      <h3 class="chart-group-title">{{ group.meal }}</h3>
-      {% set top_count = group.top[0].count %}
-      {% for spot in group.top %}
-      <div class="bar-row">
-        <span class="bar-label">{{ spot.location }}</span>
-        <span class="bar" style="--w: {{ (spot.count / top_count * 100) | round(1) }}%"></span>
-        <span class="bar-value">{{ spot.count }}</span>
+    <!-- ── Intro ─────────────────────────────────────────────── -->
+    <section class="slide t-navy l1 active"><div class="frame">
+      {{ blobs() }}
+      <div class="body top">
+        <p class="eyebrow">{% if first_name %}{{ first_name }}, your{% else %}Your{% endif %}</p>
+        <h1 class="display ac" style="--fs: 118">{{ season | upper }}<br>{{ year }}<br>IN<br>FOOD</h1>
       </div>
-      {% endfor %}
-    </section>
-    {% endfor %}
-  </div>
+      {{ foot() }}
+    </div></section>
 
-  <!-- ── Earliest / latest purchase ────────────────────────── -->
-  {{ clock_slide(times, "Your earliest bite", "Your latest bite") }}
-
-  <!-- ── Purchases per weekday ─────────────────────────────── -->
-  {{ weekday_slide(times, "Average visits per day", "avg") }}
-  {% endif %}
-
-  {% if swipes %}
-  <!-- ── Meal swipes (the Caf) ─────────────────────────────── -->
-  <div class="slide slide-swipes">
-    <p class="stats-label">You swiped into the Caf</p>
-    <p class="stats-big">{{ swipes.count }}</p>
-    <p class="stats-label">times this semester</p>
-    {% set top_meal = swipes.meal_totals | map(attribute='count') | max %}
-    <div class="swipe-meals">
-      {% for m in swipes.meal_totals %}
-      <div class="bar-row">
-        <span class="bar-label">{{ m.meal }}</span>
-        <span class="bar" style="--w: {{ (m.count / (top_meal or 1) * 100) | round(1) }}%"></span>
-        <span class="bar-value">{{ m.count }}</span>
+    <!-- ── Total spent ───────────────────────────────────────── -->
+    {% if total_spend %}
+    <section class="slide t-pink l2"><div class="frame">
+      {{ blobs() }}
+      <div class="body center">
+        <p class="eyebrow">This semester you spent</p>
+        <p class="display ac" style="--fs: {{ 96 if total_spend >= 1000 else 112 }}">{{ money(total_spend) }}</p>
+        <p class="lead">on campus food across <b>{{ visits }}</b> visits.</p>
+        <p class="sub">That's {{ total_qty }} items — {{ unique_items }} different ones.</p>
       </div>
-      {% endfor %}
-    </div>
+      {{ foot() }}
+    </div></section>
+    {% endif %}
+
+    <!-- ── #1 item ───────────────────────────────────────────── -->
+    {% if items %}
+    {% set top = items[0] %}
+    <section class="slide t-red l3"><div class="frame">
+      {{ blobs() }}
+      <div class="body bottom">
+        <p class="eyebrow">Your #1 obsession</p>
+        <h2 class="display ac" style="--fs: {{ 72 if top.name | length > 18 else 96 }}">{{ top.name }}</h2>
+        <p class="lead">{{ top.qty }} order{{ 's' if top.qty != 1 }} · {{ money(top.total_spend) }}</p>
+        {% if items | length > 1 %}
+        <p class="sub">Then: {{ items[1:] | map(attribute='name') | join(' · ') }}</p>
+        {% endif %}
+      </div>
+      {{ foot() }}
+    </div></section>
+    {% endif %}
+
+    <!-- ── Dining personality ────────────────────────────────── -->
+    {% if ai %}
+    <section class="slide t-purple l4"><div class="frame">
+      {{ blobs() }}
+      <div class="body center">
+        <p class="eyebrow">Your dining personality</p>
+        <h2 class="display ac" style="--fs: {{ 72 if ai.personality.title | length > 18 else 84 }}">{{ ai.personality.title }}</h2>
+        <p class="text">{{ ai.personality.description }}</p>
+      </div>
+      {{ foot() }}
+    </div></section>
+    {% endif %}
+
+    {% if times %}
+    <!-- ── Favorite spots by meal ────────────────────────────── -->
+    <section class="slide t-blue l1"><div class="frame">
+      {{ blobs() }}
+      <div class="body top">
+        <h2 class="display" style="--fs: 52">Your favorite<br>spots</h2>
+        <div class="groups">
+          {% for group in times.spots %}
+          <div class="panel">
+            <p class="panel-title">{{ group.meal }}</p>
+            {% set most = group.top[0].count %}
+            {% for spot in group.top %}
+            <div class="hbar"><span>{{ spot.location }}</span><i style="--w: {{ (spot.count / most * 100) | round(1) }}%"></i><b>{{ spot.count }}</b></div>
+            {% endfor %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {{ foot() }}
+    </div></section>
+
+    <!-- ── Earliest / latest bite ────────────────────────────── -->
+    <section class="slide t-orange l2"><div class="frame">
+      {{ blobs() }}
+      <div class="body center">
+        <p class="emoji">🐛</p>
+        <p class="eyebrow">Your earliest bite</p>
+        <p class="display ac" style="--fs: 60">{{ times.earliest.time }}</p>
+        <p class="lead">at {{ times.earliest.location }} · {{ times.earliest.date }}</p>
+        <div class="divider"></div>
+        <p class="emoji">🦉</p>
+        <p class="eyebrow">Your latest bite</p>
+        <p class="display ac" style="--fs: 60">{{ times.latest.time }}</p>
+        <p class="lead">at {{ times.latest.location }} · {{ times.latest.date }}</p>
+      </div>
+      {{ foot() }}
+    </div></section>
+
+    <!-- ── Visits per weekday ────────────────────────────────── -->
+    <section class="slide t-navy l3"><div class="frame">
+      {{ blobs() }}
+      <div class="body center">
+        <h2 class="display" style="--fs: 52">Average visits<br>per day</h2>
+        {% set most = times.weekdays | map(attribute='avg') | max %}
+        <div class="bars-list">
+          {% for w in times.weekdays %}
+          <div class="hbar big"><span>{{ w.day }}</span><i style="--w: {{ (w.avg / (most or 1) * 100) | round(1) }}%"></i><b>{{ w.avg }}</b></div>
+          {% endfor %}
+        </div>
+      </div>
+      {{ foot() }}
+    </div></section>
+    {% endif %}
+
+    <!-- ── Caf swipes ────────────────────────────────────────── -->
+    {% if swipes %}
+    <section class="slide t-purple l4"><div class="frame">
+      {{ blobs() }}
+      <div class="body top">
+        <p class="eyebrow">You swiped into the Caf</p>
+        <p class="display ac" style="--fs: 200">{{ swipes.count }}</p>
+        <p class="eyebrow">times. Mostly for {{ swipe_top_meal | lower }}.</p>
+        {% set most = swipes.meal_totals | map(attribute='count') | max %}
+        <div class="bars-list tight">
+          {% for m in swipes.meal_totals %}
+          <div class="hbar big"><span>{{ m.meal }}</span><i style="--w: {{ (m.count / (most or 1) * 100) | round(1) }}%"></i><b>{{ m.count }}</b></div>
+          {% endfor %}
+        </div>
+        <p class="eyebrow" style="margin-top: calc(26 * var(--u))">Swipes by day</p>
+        {% set most_day = swipes.weekdays | map(attribute='total') | max %}
+        <div class="cols">
+          {% for w in swipes.weekdays %}
+          <div><em>{{ w.total }}</em><i style="--h: {{ (w.total / (most_day or 1) * 100) | round(1) }}%"></i>{{ w.day[0] }}</div>
+          {% endfor %}
+        </div>
+      </div>
+      {{ foot() }}
+    </div></section>
+    {% endif %}
+
+    <!-- ── Flex left ─────────────────────────────────────────── -->
+    {% if flex %}
+    <section class="slide t-green l1"><div class="frame">
+      {{ blobs() }}
+      <div class="body center">
+        <p class="eyebrow">Flex Bucks left</p>
+        <p class="display ac" style="--fs: {{ 84 if flex.balance >= 1000 else 100 }}">{{ money(flex.balance) }}</p>
+        <p class="lead">Spend <u>{{ money(flex.per_week) }} a week</u> to use it all by {{ flex.end }}.</p>
+        {% if flex.pace_per_week is not none %}
+        <p class="sub">
+          You've been spending {{ money(flex.pace_per_week) }} a week.
+          {% if flex.runs_out %}At that pace you'll be out by <b>{{ flex.runs_out }}</b>. 🫠
+          {% else %}At that pace you'll finish with <b>{{ money(flex.projected_left) }}</b> left.{% endif %}
+        </p>
+        {% endif %}
+      </div>
+      {{ foot() }}
+    </div></section>
+    {% endif %}
+
+    {% if ai %}
+    <!-- ── Roast ─────────────────────────────────────────────── -->
+    <section class="slide t-red l2"><div class="frame">
+      {{ blobs() }}
+      <div class="body center">
+        <p class="emoji">🔥</p>
+        <h2 class="display ac" style="--fs: 84">The roast</h2>
+        <p class="text big">{{ ai.roast }}</p>
+      </div>
+      {{ foot() }}
+    </div></section>
+
+    <!-- ── Money talk ────────────────────────────────────────── -->
+    <section class="slide t-blue l3"><div class="frame">
+      {{ blobs() }}
+      <div class="body center">
+        <h2 class="display ac" style="--fs: 72">Money<br>talk 💸</h2>
+        <ul class="list">
+          {% for line in ai.money %}<li>{{ line }}</li>{% endfor %}
+        </ul>
+      </div>
+      {{ foot() }}
+    </div></section>
+    {% endif %}
+
+    <!-- ── Compared with other students ──────────────────────── -->
+    {% if compare %}
+    <section class="slide t-pink l4"><div class="frame">
+      {{ blobs() }}
+      <div class="body center">
+        <p class="eyebrow">You ordered more than</p>
+        <p class="display ac" style="--fs: 160">{{ compare.pct_rank }}%</p>
+        <p class="lead">of the {{ compare.runs }} OBU students who've wrapped so far.</p>
+        <p class="sub">Average: {{ compare.avg_qty }} items{% if compare.avg_spend %} · {{ money(compare.avg_spend) }}{% endif %}. You: {{ total_qty }} items · {{ money(total_spend) }}.</p>
+        {% if compare.most_common_top %}<p class="sub">Most common #1 on campus: <b>{{ compare.most_common_top }}</b></p>{% endif %}
+      </div>
+      {{ foot() }}
+    </div></section>
+    {% endif %}
+
+    <!-- ── Summary card ──────────────────────────────────────── -->
+    <section class="slide t-navy l1 summary"><div class="frame">
+      {{ blobs() }}
+      <div class="body top">
+        <p class="eyebrow plain">{% if first_name %}{{ first_name }}'s {% endif %}{{ semester_label }}</p>
+        <h2 class="display ac" style="--fs: 66">OBU STU<br>WRAPPED</h2>
+        {% if ai %}
+        <div class="panel">
+          <p class="panel-title">Dining personality</p>
+          <p class="display" style="--fs: 38">{{ ai.personality.title }}</p>
+        </div>
+        {% endif %}
+        <div class="grid">
+          {% if items %}<div><h4>Top items</h4><ol>{% for i in items[:4] %}<li><span>{{ loop.index }}</span>{{ i.name }}</li>{% endfor %}</ol></div>{% endif %}
+          {% if top_spots %}<div><h4>Top spots</h4><ol>{% for s in top_spots %}<li><span>{{ loop.index }}</span>{{ s.location }}</li>{% endfor %}</ol></div>{% endif %}
+          {% if swipes %}<div><h4>Caf swipes</h4><p class="stat">{{ swipes.count }}</p></div>{% endif %}
+          {% if total_spend %}<div><h4>Spent on Flex</h4><p class="stat">{{ money(total_spend) }}</p></div>{% endif %}
+        </div>
+        {% if ai %}
+        <div class="panel">
+          <p class="panel-title">The roast 🔥</p>
+          <p class="text">{{ ai.roast.split('. ')[0] }}.</p>
+        </div>
+        {% endif %}
+        {% if flex %}
+        <div class="flex-line"><span>Flex left{% if flex.runs_out %} · out by {{ flex.runs_out }}{% endif %}</span><b class="stat">{{ money(flex.balance) }}</b></div>
+        {% endif %}
+      </div>
+      {{ foot("get yours @ wrapped.drew.place") }}
+    </div></section>
+
+    <!-- ── Outro (not a share image: the share button sends the link) ── -->
+    <section class="slide t-orange l2 outro" data-share="link"><div class="frame">
+      {{ blobs() }}
+      <div class="body center">
+        <h2 class="display ac" style="--fs: 92">That's a<br>wrap{% if first_name %}, {{ first_name }}{% endif %}.</h2>
+        <p class="lead">See you next semester.</p>
+        <div class="outro-actions">
+          <button class="btn-primary js-share-link">Share my Wrapped</button>
+          <a class="btn-secondary" href="{{ url_for('index') }}">Get your own</a>
+          <a class="btn-secondary" href="{{ dashboard_url }}">All my items</a>
+        </div>
+      </div>
+      {{ foot() }}
+    </div></section>
   </div>
 
-  {{ clock_slide(swipes, "Your earliest swipe", "Your latest swipe") }}
-
-  {{ weekday_slide(swipes, "Swipes by day", "total") }}
-  {% endif %}
-
-  <!-- ── CFA slide (conditional) ──────────────────────────── -->
-  {% if cfa_qty > 0 %}
-  <div class="slide slide-cfa">
-    <p class="cfa-logo">🐔</p>
-    <h2 class="cfa-title">Chick-fil-A<br>stan</h2>
-    <p class="cfa-stat">{{ cfa_qty }} items · ${{ "%.2f"|format(cfa_spend) }} spent</p>
-    {% if cfa_qty >= 20 %}
-      <p class="item-badge">Eat Mor Chikin 🐄</p>
-    {% elif cfa_qty >= 10 %}
-      <p class="item-badge">My pleasure 😇</p>
-    {% else %}
-      <p class="item-badge">Getting there...</p>
-    {% endif %}
+  <div class="actions">
+    <button class="share-btn" id="share-btn" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M12 3l-4.5 4.5M12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span id="share-label">Share</span>
+    </button>
   </div>
-  {% endif %}
-
-  <!-- ── Tacos 4 Life slide (conditional) ───────────────── -->
-  {% if tacos_qty > 0 %}
-  <div class="slide slide-tacos">
-    <p class="cfa-logo">🌮</p>
-    <h2 class="cfa-title">Tacos 4<br>Life fan</h2>
-    <p class="cfa-stat">{{ tacos_qty }} items · ${{ "%.2f"|format(tacos_spend) }} spent</p>
-    {% if tacos_qty >= 20 %}
-      <p class="item-badge">Certified taco addict 🌶️</p>
-    {% elif tacos_qty >= 10 %}
-      <p class="item-badge">Living the taco life 🤘</p>
-    {% else %}
-      <p class="item-badge">A taco a day... 🌮</p>
-    {% endif %}
-  </div>
-  {% endif %}
-
-  <!-- ── Dr. Jack's slide (conditional) ──────────────────── -->
-  {% if drjacks_qty > 0 %}
-  <div class="slide slide-drjacks">
-    <p class="cfa-logo">☕</p>
-    <h2 class="cfa-title">Dr. Jack's<br>regular</h2>
-    <p class="cfa-stat">{{ drjacks_qty }} items · ${{ "%.2f"|format(drjacks_spend) }} spent</p>
-    {% if drjacks_qty >= 30 %}
-      <p class="item-badge">Caffeine dependency confirmed ☕</p>
-    {% elif drjacks_qty >= 15 %}
-      <p class="item-badge">Coffee connoisseur 🏅</p>
-    {% else %}
-      <p class="item-badge">Occasional coffee drinker</p>
-    {% endif %}
-  </div>
-  {% endif %}
-
-  {% if ai %}
-  <!-- ── Personalized: roast ───────────────────────────────── -->
-  <div class="slide slide-ai slide-roast">
-    <p class="cfa-logo">🔥</p>
-    <h2 class="ai-title">The roast</h2>
-    <p class="ai-text">{{ ai.roast }}</p>
-  </div>
-
-  <!-- ── Personalized: money ───────────────────────────────── -->
-  <div class="slide slide-ai slide-money">
-    <h2 class="chart-title">Money talk 💸</h2>
-    <ul class="ai-list">
-      {% for line in ai.money %}<li>{{ line }}</li>{% endfor %}
-    </ul>
-  </div>
-  {% endif %}
-
-  <!-- ── Comparison slide (conditional, needs ≥2 users) ────── -->
-  {% if total_runs >= 2 %}
-  <div class="slide slide-compare">
-    <p class="stats-label">vs. other OBU students</p>
-    {% if pct_rank is not none %}
-      <p class="stats-big">{{ pct_rank }}<span class="pct-sup">%</span></p>
-      <p class="stats-label">
-        You ordered more than {{ pct_rank }}% of users
-      </p>
-    {% endif %}
-    {% if avg_qty %}
-    <p class="compare-sub">
-      Avg items: <strong>{{ avg_qty }}</strong> &nbsp;·&nbsp; You: <strong>{{ total_qty }}</strong>
-    </p>
-    {% endif %}
-    {% if avg_spend %}
-    <p class="compare-sub">
-      Avg spend: <strong>${{ "%.2f"|format(avg_spend) }}</strong> &nbsp;·&nbsp; You: <strong>${{ "%.2f"|format(total_spend) }}</strong>
-    </p>
-    {% endif %}
-    {% if total_all_spend %}
-    <p class="compare-sub compare-total-spend">
-      OBU students have spent <strong>${{ "%.2f"|format(total_all_spend) }}</strong> total
-    </p>
-    {% endif %}
-    {% if most_common_top %}
-    <p class="compare-sub" style="margin-top:.5rem">
-      Most popular #1 campus-wide: <strong>{{ most_common_top }}</strong>
-    </p>
-    {% endif %}
-  </div>
-  {% endif %}
-
-  <!-- ── Outro ─────────────────────────────────────────────── -->
-  <div class="slide slide-outro">
-    <h2 class="outro-title">That's your<br>OBU Stu Wrapped!</h2>
-    <p class="outro-sub">See you next semester.</p>
-    <div class="outro-links">
-      <button class="btn-primary" id="save-img-btn">Save Image 📸</button>
-      <button class="btn-secondary js-share">Share 🔗</button>
-      <a href="{{ url_for('index') }}" class="btn-secondary">Get your own</a>
-      <a href="{{ dashboard_url }}" class="btn-secondary">Dashboard ↗</a>
-    </div>
-  </div>
-
 </div>
-
-<!-- ── Share card (off-screen, captured by html2canvas) ─── -->
-<div id="share-card">
-  <div class="sc-eyebrow">{% if student_name %}{{ student_name }} · {% endif %}{{ semester_label }}</div>
-  <div class="sc-title-wrap">
-    <span class="sc-title-top">OBU Stu</span>
-    <span class="sc-title-bot">Wrapped</span>
-  </div>
-  <div class="sc-items">
-    {% for item in items %}
-    <div class="sc-item">
-      <span class="sc-rank">#{{ item.rank }}</span>
-      <span class="sc-name">{{ item.name }}</span>
-      <span class="sc-spend">${{ "%.2f"|format(item.total_spend) }}</span>
-    </div>
-    {% endfor %}
-  </div>
-  <div class="sc-footer">get yours @ wrapped.drew.place</div>
-</div>
-
 {% endblock %}
 
 {% block scripts %}
@@ -325,7 +284,8 @@
         integrity="sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA=="
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
-  const DASHBOARD_URL = {{ dashboard_url | tojson }};
+  const SHARE_URL = {{ share_url | tojson }};
+  const SHARE_TITLE = {{ ((first_name ~ "'s OBU Stu Wrapped") if first_name else "My OBU Stu Wrapped") | tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/wrapped.js') }}"></script>
 {% endblock %}
