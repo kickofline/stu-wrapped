@@ -320,7 +320,7 @@ def campus_percentiles(current: dict, students: list[dict], minimum: int = 3) ->
     return [{k: insight[k] for k in ("top", "more_than", "label", "detail")} for insight in candidates[:3]]
 
 
-MEAL_WINDOW = timedelta(minutes=2)
+MEAL_WINDOW = timedelta(minutes=1)
 # (minimum shared meals, title), highest first.
 MEAL_TIERS = ((30, "Caf Soulmates"), (10, "Caf Crew"))
 

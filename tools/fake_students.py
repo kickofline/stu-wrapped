@@ -117,10 +117,10 @@ def build() -> list[Student]:
         maya.swipe(at(d, 17, 30 + maya.rng.randint(0, 25)))
     out.append(maya)
 
-    # 2. Caf Soulmates with Maya (35 swipes within 2 minutes) and Same Order Energy.
+    # 2. Caf Soulmates with Maya (35 swipes within a minute) and Same Order Energy.
     jordan = Student("jordan", "Jordan Ellis", "Caf Soulmates + Same Order Energy with Maya", 149.85, 41, 2)
     for when in jordan.rng.sample(maya.swipes, 35):
-        jordan.swipe(when + timedelta(minutes=jordan.rng.randint(0, 2)))
+        jordan.swipe(when + timedelta(minutes=jordan.rng.randint(0, 1)))
     for d in days(jordan.rng, 8):
         jordan.swipe(at(d, 7, 45 + jordan.rng.randint(0, 10)))
     for d in days(jordan.rng, 14, range(5)):
@@ -132,7 +132,7 @@ def build() -> list[Student]:
     # 3. Caf Crew with Maya (12 shared meals) and Dining Cousins.
     priya = Student("priya", "Priya Nair", "Caf Crew + Dining Cousins with Maya", 268.10, 55, 3)
     for when in priya.rng.sample(maya.swipes, 12):
-        priya.swipe(when + timedelta(minutes=priya.rng.choice([-2, -1, 1, 2])))
+        priya.swipe(when + timedelta(minutes=priya.rng.choice([-1, 1])))
     for d in days(priya.rng, 20):
         priya.swipe(at(d, 18, 40 + priya.rng.randint(0, 15)))
     for d in days(priya.rng, 12):

@@ -59,16 +59,16 @@ class SocialInsightsTests(unittest.TestCase):
             "Matcha Machine", "Caf Regular", "Night Owl",
         ])
 
-    def test_friend_meals_pair_swipes_within_two_minutes_once_each(self):
+    def test_friend_meals_pair_swipes_within_one_minute_once_each(self):
         noon = datetime(2026, 10, 18, 12, 5)
         dinner = datetime(2026, 10, 19, 17, 30)
         match = friend_match(
             {"items": {"Taco": 3}, "_caf_times": [noon, dinner, datetime(2026, 10, 20, 8, 0)]},
-            # Two swipes near noon (only one can pair), dinner 2 min late (pairs),
-            # and one 3 min off that must not pair.
+            # Two swipes near noon (only one can pair), dinner 1 min late (pairs),
+            # and one 2 min off that must not pair.
             {"items": {"Taco": 1}, "_caf_times": [
-                noon, noon.replace(minute=6), dinner.replace(minute=32),
-                datetime(2026, 10, 20, 8, 3),
+                noon, noon.replace(minute=6), dinner.replace(minute=31),
+                datetime(2026, 10, 20, 8, 2),
             ]},
         )
         self.assertEqual(match["likely_meals"], 2)
