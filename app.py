@@ -485,7 +485,9 @@ def _summary(transactions: list, swipes: list, metadata: dict, label: str) -> di
         "paid_with_flex": paid_by_flex,
         "paid_other_ways": round(total_spend - paid_by_flex, 2),
         "avg_per_visit": round(total_spend / len(transactions), 2) if transactions else 0,
-        "top_items": [{k: i[k] for k in ("name", "qty", "total_spend")} for i in items[:10]],
+        "top_items": [{**{k: i[k] for k in ("name", "qty", "total_spend")},
+                       "bought_at": sorted(name for name, v in spots.items() if i["name"] in v["items"])}
+                      for i in items[:10]],
         "unique_items": len(items),
         "spots": {k: {"visits": v["visits"], "spend": round(v["spend"], 2), "different_items": len(v["items"])}
                   for k, v in spots.items()},

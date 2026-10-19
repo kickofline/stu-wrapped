@@ -18,6 +18,8 @@ import threading
 
 import requests
 
+from name_map import expand_name
+
 BASE_URL = os.environ.get("LITELLM_BASE_URL", "")
 API_KEY = os.environ.get("LITELLM_API_KEY", "")
 MODEL = os.environ.get("LITELLM_MODEL", "deepseek-v4.1-flash")
@@ -83,6 +85,8 @@ For every receipt, return the real items the student got:
 - "detail": size and add-ons in a few words, e.g. "Large, almond milk, flavor syrup"; "" if none.
 - "qty": how many of that item; "total": dollars for that item including its add-ons.
 - The totals of a receipt must add up to the receipt's line totals exactly.
+- Never return a register name as-is when it is abbreviated or ALL CAPS: use the menu name,
+  e.g. "SODA" -> "Fountain Drink", "CFA SANDWICH" -> "Chick-fil-A Sandwich".
 Use the menus below for real names. Answer with JSON only:
 {"receipts": [{"id": <receipt id>, "items": [{"item": str, "detail": str, "qty": int, "total": number}]}]}"""
 
@@ -99,6 +103,22 @@ def _signature(tx: dict) -> str:
     location = re.sub(r"\s+\d+$", "", tx["location"])
     lines = "; ".join(f'{i["qty"]} x {i["name"]} ${(i.get("subtotal") or 0):.2f}' for i in tx["items"])
     return f"{location} | {lines}"
+
+
+def _display_name(name: str) -> str:
+    """Safety net for names the model leaves as raw register text ("SODA"): known
+    abbreviations from name_map, otherwise title case (short words like "BLT" kept)."""
+    name = name.strip()
+    if not (name.isupper() and any(c.isalpha() for c in name)):
+        return name
+    mapped = expand_name(name)
+    if mapped != name:
+        return mapped
+    return " ".join(word.capitalize() if len(word) > 3 else word for word in name.split())
+
+
+def _cleaned(items: list) -> list:
+    return [{**item, "item": _display_name(item["item"])} for item in items]
 
 
 def _cache_key(signature: str) -> str:
@@ -134,7 +154,7 @@ def normalize(transactions: list) -> None:
         sig = _signature(tx)
         key = _cache_key(sig)
         if key in cache:
-            tx["clean_items"] = cache[key]
+            tx["clean_items"] = _cleaned(cache[key])
         else:
             pending.setdefault(sig, []).append(tx)
 
@@ -151,7 +171,7 @@ def normalize(transactions: list) -> None:
             items = receipt.get("items") or []
             if not _valid(items, pending[sig][0]):
                 continue
-            clean = [{"item": i["item"].strip(), "detail": (i.get("detail") or "").strip(),
+            clean = [{"item": _display_name(i["item"]), "detail": (i.get("detail") or "").strip(),
                       "qty": int(i["qty"]), "total": round(float(i["total"]), 2)} for i in items]
             cache[_cache_key(sig)] = clean
             for tx in pending[sig]:
@@ -173,7 +193,8 @@ You get their stats as JSON. Write in second person, specific to their numbers a
 short, and clean (PG, no profanity, nothing about body or weight). Every claim must follow from
 the numbers given: never invent comparisons, counts, or items, and check any "more than" against the data.
 Only name a day of the week (including puns like "Taco Tuesday") when avg_visits_per_weekday shows
-visits that day; per-spot item variety is spots[...].different_items. If flex_left.ran_out is set,
+visits that day; per-spot item variety is spots[...].different_items, and an item was only bought
+at the spots in its top_items[...].bought_at (never place it at another spot). If flex_left.ran_out is set,
 their Flex already ran out on that date: say so and never project a future run-out date. If
 paid_other_ways is above 0, only paid_with_flex came from Flex.
 Answer with JSON only:

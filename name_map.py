@@ -13,6 +13,7 @@ NAME_MAP: dict[str, str] = {
     "22 oz foun": "22 oz Fountain Drink",
     "fontn hot chocolt": "Hot Chocolate",
     "cfa soft drink 32oz": "CFA Soft Drink 32 oz",
+    "soda": "Fountain Drink",
 
     # CFA sandwiches / combos
     "cfa sand": "CFA Sandwich",
