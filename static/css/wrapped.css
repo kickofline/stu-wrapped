@@ -372,7 +372,7 @@ body:has(.wrapped-container) .top-nav { display: none; }
 .slide-flex .stats-sub { max-width: 32rem; line-height: 1.5; }
 .flex-pace { margin-top: 1rem; }
 
-/* ── DeepSeek slides ───────────────────────────────────────── */
+/* ── Personalized slides ───────────────────────────────────── */
 .slide-ai { text-align: center; gap: 1rem; }
 .slide-personality { background: linear-gradient(150deg, #3a0ca3 0%, #7209b7 55%, #f72585 100%); }
 .slide-roast       { background: linear-gradient(150deg, #9d0208 0%, #dc2f02 60%, #f48c06 100%); }

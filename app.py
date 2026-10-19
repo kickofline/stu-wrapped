@@ -256,7 +256,7 @@ def _run_job(job_id: str, tag: str, invite: dict) -> None:
     }
     ai = None
     if analysis.enabled():
-        update_progress(job_id, 5, "Asking DeepSeek to decode your orders...")
+        update_progress(job_id, 5, "Personalizing your Wrapped...")
         try:
             analysis.normalize(transactions)
             ai = analysis.analyze(_summary(transactions, swipes, metadata, label))
