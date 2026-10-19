@@ -72,7 +72,6 @@ class SocialInsightsTests(unittest.TestCase):
             ]},
         )
         self.assertEqual(match["likely_meals"], 2)
-        self.assertEqual(match["likely_meal_times"], ["October 19 at 5:30 PM", "October 18 at 12:05 PM"])
         self.assertIsNone(match["meal_title"])
 
     def test_friend_meal_titles_start_at_ten_and_thirty(self):

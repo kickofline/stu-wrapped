@@ -55,7 +55,6 @@
       {% if match.meal_title %}<p class="buddy-title">{{ match.meal_title }}</p>{% endif %}
       <strong>{{ match.likely_meals }}</strong>
       <p>time{{ 's' if match.likely_meals != 1 }} at the Caf</p>
-      <ul>{% for moment in match.likely_meal_times %}<li>{{ moment }}</li>{% endfor %}</ul>
       <small>Counted when you both swiped into the Caf within 2 minutes of each other.</small>
     </section>
     {% endif %}

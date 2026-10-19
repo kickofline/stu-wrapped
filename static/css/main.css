@@ -189,8 +189,6 @@ body:has(.compare-page):has(.flash) .compare-shell { padding-top: 6.5rem; }
 .caf-buddy > .buddy-title { font-family: var(--display); font-size: clamp(1.6rem, 6vw, 2.6rem); line-height: 1; margin-top: .5rem; }
 .caf-buddy > strong { display: block; font-family: var(--display); font-size: clamp(4rem, 14vw, 7rem); line-height: .85; margin-top: .8rem; }
 .caf-buddy > p:not(.card-label):not(.buddy-title) { font-size: 1.25rem; font-weight: 800; }
-.caf-buddy ul { list-style: none; display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
-.caf-buddy li { border-radius: 999px; padding: .4rem .65rem; background: rgba(0,0,0,.09); font-weight: 800; }
 .caf-buddy small { display: block; margin-top: 1rem; font-weight: 700; opacity: .68; }
 .shared-card { margin-top: 1rem; }
 .shared-card ol, .ranked-card ol { list-style: none; display: grid; gap: .7rem; margin-top: .8rem; }

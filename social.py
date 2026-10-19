@@ -306,31 +306,26 @@ def friend_match(left: dict, right: dict) -> dict:
     # that fall within the window, so each swipe is used at most once.
     left_times = sorted(left.get("_caf_times") or [])
     right_times = sorted(right.get("_caf_times") or [])
-    together = []
+    together = 0
     i = j = 0
     while i < len(left_times) and j < len(right_times):
         a, b = left_times[i], right_times[j]
         if abs(a - b) <= MEAL_WINDOW:
-            together.append(min(a, b))
+            together += 1
             i += 1
             j += 1
         elif a < b:
             i += 1
         else:
             j += 1
-    together.reverse()
-    meal_title = next((title for minimum, title in MEAL_TIERS if len(together) >= minimum), None)
+    meal_title = next((title for minimum, title in MEAL_TIERS if together >= minimum), None)
 
     return {
         "compatibility": compatibility,
         "vibe": vibe,
         "shared": shared,
-        "likely_meals": len(together),
+        "likely_meals": together,
         "meal_title": meal_title,
-        "likely_meal_times": [
-            f"{when:%B} {when.day} at {when:%I:%M %p}".replace(" 0", " ")
-            for when in together[:3]
-        ],
     }
 
 
