@@ -14,12 +14,13 @@
 
 /* ── Variables ─────────────────────────────────────────────── */
 :root {
-  --navy:     #1e3264;
-  --navy-hi:  #2c4889;
-  --navy-lo:  #15264f;
-  --lime:     #f4ff5c;
-  --bg:       var(--navy);
-  --card:     rgba(255,255,255,.08);
+  --base:     #6c2bd9;
+  --base-hi:  #8550ec;
+  --base-lo:  #5420b4;
+  --ink:      #1c0a3d;   /* text on accent buttons */
+  --lime:     #c6f35e;
+  --bg:       var(--base);
+  --card:     rgba(255,255,255,.1);
   --border:   rgba(255,255,255,.14);
   --accent:   var(--lime);
   --accent2:  #8fb3ff;
@@ -71,7 +72,7 @@ button { font: inherit; }
   text-decoration: none; transition: transform .15s, opacity .2s;
   -webkit-tap-highlight-color: transparent;
 }
-.btn-primary { background: var(--accent); color: var(--navy-lo); }
+.btn-primary { background: var(--accent); color: var(--ink); }
 .btn-secondary { background: rgba(255,255,255,.12); color: var(--text); }
 .pill-light { background: #fff; color: #111; }
 .btn-primary:active, .btn-secondary:active, .pill:active { transform: scale(.97); }
@@ -80,19 +81,20 @@ button { font: inherit; }
 .blob { position: absolute; border-radius: 50%; pointer-events: none; }
 
 /* ── Landing ───────────────────────────────────────────────── */
-/* Sized to the visible viewport (dvh) so the whole flow fits on one screen. */
+/* Sized to the visible viewport (dvh); the returning-visitor screen fits on one screen. */
 .landing { position: relative; overflow: hidden; min-height: 100dvh; display: flex; align-items: center; }
-.landing .blob.b1 { width: 380px; height: 380px; top: -200px; right: -190px; background: var(--navy-hi); }
-.landing .blob.b2 { width: 260px; height: 260px; bottom: -110px; left: -120px; background: var(--navy-lo); }
+.landing .blob.b1 { width: 380px; height: 380px; top: -200px; right: -190px; background: var(--base-hi); }
+.landing .blob.b2 { width: 260px; height: 260px; bottom: -110px; left: -120px; background: var(--base-lo); }
 .landing-inner { position: relative; width: 100%; max-width: 540px; margin: 0 auto; padding: clamp(.75rem, 3.5dvh, 3.5rem) 1.6rem clamp(.75rem, 2.5dvh, 3rem); }
 .eyebrow { font-weight: 800; font-size: 1.15rem; color: var(--accent); }
 .landing h1 { font-size: clamp(2.6rem, min(16vw, 9dvh), 5.6rem); margin-top: clamp(.4rem, 1.5dvh, 1rem); }
 .landing .lede { margin-top: clamp(.4rem, 1.5dvh, 1rem); }
 .steps { list-style: none; margin-top: clamp(1rem, 4dvh, 2.6rem); display: flex; flex-direction: column; gap: clamp(.85rem, 3dvh, 1.9rem); }
 .steps .eyebrow { margin-bottom: clamp(.35rem, 1dvh, .6rem); }
-.chip { display: flex; align-items: center; gap: .6rem; background: var(--card); border-radius: 14px; padding: .55rem .55rem .55rem 1rem; }
+.chip { display: flex; align-items: center; gap: .6rem; background: var(--card); border-radius: 14px; padding: .55rem .55rem .55rem 1rem; cursor: pointer; }
 .chip code { flex: 1; font-family: var(--font); font-weight: 700; font-size: 1rem; word-break: break-all; }
-.chip button { flex: none; background: var(--accent); color: var(--navy-lo); font-weight: 800; border: 0; border-radius: 10px; padding: .55rem .9rem; cursor: pointer; }
+.chip.copied { outline: 3px solid var(--accent); outline-offset: 2px; }
+.chip button { flex: none; background: var(--accent); color: var(--ink); font-weight: 800; border: 0; border-radius: 10px; padding: .55rem .9rem; cursor: pointer; }
 .landing .cta { font-size: 1.25rem; padding: 1.1rem 2.2rem; }
 .campus-link { margin-top: clamp(.9rem, 3dvh, 2rem); padding: .65rem 1.3rem; font-size: .95rem; }
 .fine-print { margin-top: clamp(.6rem, 2.2dvh, 2rem); color: var(--muted); font-size: .8rem; font-weight: 600; }
@@ -114,8 +116,13 @@ button { font: inherit; }
   .fine-print { margin-top: .3rem; }
 }
 
-.setup-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
-.landing .help-link { padding: .65rem 1.2rem; font-size: .95rem; }
+/* Step 2's walkthrough: the three Atrium screens, full width, in order. */
+.guide { list-style: none; display: grid; gap: .9rem; margin-top: .9rem; }
+.guide li { background: var(--card); border-radius: 18px; padding: .75rem; }
+.guide p { font-weight: 700; line-height: 1.3; margin-bottom: .65rem; }
+.guide b { display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem; margin-right: .35rem; border-radius: 50%; background: var(--accent); color: var(--ink); font-size: .85rem; }
+.guide img { display: block; width: 100%; height: auto; border-radius: 12px; background: #fff; }
+.guide-note { margin-top: .8rem; font-weight: 700; color: var(--muted); }
 .returning-ready { align-items: stretch; }
 .returning-ready > form:first-child { width: 100%; }
 .landing .cta-go {
@@ -127,69 +134,7 @@ button { font: inherit; }
   line-height: .85;
 }
 
-/* ── Setup help ────────────────────────────────────────────── */
-.help-page {
-  position: relative;
-  min-height: 100dvh;
-  overflow: hidden;
-  background: #f037a5;
-}
-.help-page .blob.b1 { width: 420px; height: 420px; top: -220px; right: -220px; background: #f564bb; }
-.help-page .blob.b2 { width: 330px; height: 330px; bottom: -170px; left: -170px; background: #cf2689; }
-.help-shell { position: relative; width: min(100%, 760px); margin: 0 auto; padding: 1.25rem 1.15rem 4rem; }
-.help-back { margin-bottom: 2rem; padding: .65rem 1.1rem; font-size: .95rem; }
-.help-page h1 { margin: .7rem 0 1rem; font-size: clamp(3.8rem, 19vw, 6.6rem); color: var(--lime); }
-.help-lede { max-width: 590px; font-size: 1.15rem; font-weight: 750; }
-.help-steps { list-style: none; display: grid; gap: 1.15rem; margin-top: 2rem; }
-.help-step {
-  display: grid;
-  gap: .9rem;
-  padding: 1.1rem;
-  border: 1px solid rgba(255,255,255,.2);
-  border-radius: 22px;
-  background: rgba(21,38,79,.22);
-  box-shadow: 0 12px 32px rgba(21,38,79,.1);
-}
-.step-head { display: flex; align-items: center; gap: .75rem; }
-.step-number {
-  display: inline-flex;
-  flex: none;
-  width: 2.6rem;
-  height: 2.6rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--lime);
-  color: var(--navy-lo);
-  font: 400 1.35rem var(--display);
-}
-.step-copy { min-width: 0; }
-.step-head h2 { font-family: var(--display); font-size: clamp(1.35rem, 6vw, 2rem); line-height: 1.05; }
-.step-copy p:not(:first-child) { margin-top: .65rem; }
-.step-copy .pill { margin-top: 1rem; }
-.help-shot {
-  justify-self: center;
-  width: 100%;
-  margin-top: .3rem;
-  overflow: hidden;
-  border: 3px solid #fff;
-  border-radius: 15px;
-  background: #fff;
-  box-shadow: 0 10px 24px rgba(21,38,79,.2);
-}
-.help-shot img { display: block; width: 100%; height: auto; }
-.help-shot-phone { width: min(100%, 330px); }
-.help-shot-permissions { width: min(100%, 500px); }
-.help-address { margin-top: .65rem; background: rgba(21,38,79,.28); }
-.help-address code { word-break: normal; overflow-wrap: anywhere; }
-.already-note { padding: .85rem; border-radius: 13px; background: var(--lime); color: var(--navy-lo); }
-.finish-button { width: 100%; margin-top: 1rem; }
 .campus-back { margin-bottom: 2.4rem; padding: .65rem 1.1rem; font-size: .95rem; }
-
-@media (min-width: 700px) {
-  .help-shell { padding-top: 2rem; }
-  .help-step { padding: 1.5rem; }
-}
 
 /* ── Waiting ───────────────────────────────────────────────── */
 .waiting-page { --bg: #f037a5; background: var(--bg); position: relative; overflow: hidden; min-height: 100dvh; display: flex; align-items: center; }
@@ -277,9 +222,6 @@ body:has(.compare-page):has(.flash) .compare-shell { padding-top: 6.5rem; }
 .compare-actions { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: 1.2rem; }
 
 /* ── Campus Leaderboard ────────────────────────────────────── */
-.campus-page { background: #2d46b9; }
-.campus-page .blob.b1 { background: #4762d6; }
-.campus-page .blob.b2 { background: #22389a; }
 .campus-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; margin: 1.6rem 0 1rem; }
 .campus-stats .card { container-type: inline-size; }
 /* Long numbers (a four-figure Flex total) shrink to fit their card instead of spilling into the next. */

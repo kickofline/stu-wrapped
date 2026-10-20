@@ -36,7 +36,6 @@
         {% endif %}
       </form>
       {% if returning.wrapped_url %}<a class="pill pill-light" href="{{ returning.wrapped_url }}">View my Wrapped</a>{% endif %}
-      {% if not returning.has_run %}<a class="btn-secondary help-link" href="{{ url_for('setup_help') }}">Need help?</a>{% endif %}
       <form method="POST" action="{{ url_for('switch_account') }}">
         <button type="submit" class="link-button">Use a different account</button>
       </form>
@@ -46,20 +45,23 @@
       <ol class="steps">
         <li>
           <p class="eyebrow">1 · Copy your guest email</p>
-          <div class="chip">
+          <div class="chip" role="button" tabindex="0" aria-label="Copy your guest email" onclick="copyAddr()" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); copyAddr(); }">
             <code id="plus-addr-text">{{ inbox_address }}</code>
-            <button type="button" id="copy-btn" onclick="copyAddr(this)">Copy</button>
+            <button type="button" id="copy-btn" tabindex="-1">Copy</button>
           </div>
         </li>
         <li>
           <p class="eyebrow">2 · Add it as a Flex Bucks guest</p>
-          <div class="setup-actions">
-            <a class="pill pill-light" href="https://connectobu.atriumcampus.com/guestaccess.php" target="_blank" rel="noopener" onclick="markFlexOpened()">Open Flex Bucks ↗</a>
-            <a class="btn-secondary help-link" href="{{ url_for('setup_help') }}">Need help?</a>
-          </div>
+          <a class="pill pill-light" href="https://connectobu.atriumcampus.com/guestaccess.php" target="_blank" rel="noopener" onclick="markFlexOpened()">Open Flex Bucks ↗</a>
+          <ol class="guide">
+            <li><p><b>a</b> Sign in with your OBU Microsoft account.</p><img src="{{ url_for('static', filename='help/obu-microsoft.webp') }}" alt="Microsoft sign-in screen" width="390" height="410" loading="lazy"></li>
+            <li><p><b>b</b> Open <strong>Friend/Relative Access</strong> and tap <strong>ADD</strong>.</p><img src="{{ url_for('static', filename='help/friend-relative-access.webp') }}" alt="Friend/Relative Access page with the purple ADD button" width="775" height="585" loading="lazy"></li>
+            <li><p><b>c</b> Paste your email, leave the boxes checked, tap <strong>ADD</strong>.</p><img src="{{ url_for('static', filename='help/guest-permissions.webp') }}" alt="Guest form with the email box, checked permissions and ADD button" width="520" height="835" loading="lazy"></li>
+          </ol>
+          <p class="guide-note">Atrium says it's already added? You're set. Go to step 3.</p>
         </li>
         <li>
-          <p class="eyebrow">3 · Get your Wrapped</p>
+          <p class="eyebrow">3 · Come back and get your Wrapped</p>
           <button type="submit" class="btn-primary cta">Make my Wrapped</button>
         </li>
       </ol>
@@ -73,12 +75,13 @@
 
 {% block scripts %}
 <script>
-  function copyAddr(btn) {
-    const text = document.getElementById('plus-addr-text').textContent.trim();
+  function copyAddr() {
+    const chip = document.querySelector('.chip'), btn = document.getElementById('copy-btn');
     track('email_copied');
-    navigator.clipboard.writeText(text).then(function () {
+    navigator.clipboard.writeText(document.getElementById('plus-addr-text').textContent.trim()).then(function () {
       btn.textContent = 'Copied!';
-      setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+      chip.classList.add('copied');
+      setTimeout(function () { btn.textContent = 'Copy'; chip.classList.remove('copied'); }, 2000);
     });
   }
 

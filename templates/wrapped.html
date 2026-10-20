@@ -5,7 +5,7 @@
 {% set who = (first_name ~ "'s") if first_name else "My" %}
 {% set og_title = (who ~ " " ~ og.label ~ " · OBU Stu Wrapped") if og.label else (((first_name ~ "'s OBU Stu Wrapped") if first_name else "OBU Stu Wrapped") ~ " · " ~ semester_label) %}
 {% set og_desc = ((ai.personality.title ~ " · ") if ai else "") ~ "See their semester in food, then get yours." %}
-<meta name="theme-color" content="#1e3264">
+<meta name="theme-color" content="#6c2bd9">
 <meta name="description" content="{{ og_desc }}">
 <meta property="og:type" content="website">
 <meta property="og:title" content="{{ og_title }}">
@@ -36,7 +36,7 @@
     <div class="progress" id="progress"></div>
 
     <!-- ── Intro ─────────────────────────────────────────────── -->
-    <section class="slide t-navy l1 active" data-slide="intro"><div class="frame">
+    <section class="slide t-purple l1 active" data-slide="intro"><div class="frame">
       {{ blobs() }}
       <div class="body top">
         <p class="eyebrow">{% if first_name %}{{ first_name }}, your{% else %}Your{% endif %}</p>
@@ -335,7 +335,7 @@
     {% endif %}
 
     <!-- ── Summary card ──────────────────────────────────────── -->
-    <section class="slide t-navy l1 summary" data-slide="summary"><div class="frame">
+    <section class="slide t-purple l1 summary" data-slide="summary"><div class="frame">
       {{ blobs() }}
       <div class="body top">
         <p class="eyebrow plain">{% if first_name %}{{ first_name }}'s {% endif %}{{ semester_label }}</p>

@@ -38,7 +38,6 @@ body:has(.viewer) { transition: background-color .5s ease; }
 .progress i.on { opacity: 1; }
 
 /* ── Themes: one hue per slide, blobs are its own lighter/darker shades ── */
-.t-navy   { --bg: #1e3264; --b1: #2c4889; --b2: #15264f; --fg: #fff;    --ac: #f4ff5c; --chip: rgba(255,255,255,.1); }
 .t-pink   { --bg: #f037a5; --b1: #f564bb; --b2: #cf2689; --fg: #fff;    --ac: #ffe14d; --chip: rgba(0,0,0,.15); }
 .t-blue   { --bg: #2d46b9; --b1: #4762d6; --b2: #22389a; --fg: #fff;    --ac: #f4ff5c; --chip: rgba(255,255,255,.1); }
 .t-red    { --bg: #ff4632; --b1: #ff6c5c; --b2: #e2321f; --fg: #fff;    --ac: #ffe14d; --chip: rgba(0,0,0,.12); }
