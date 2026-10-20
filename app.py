@@ -263,6 +263,7 @@ def _student_summary(transactions: list, swipes: list) -> dict:
         "top_item": items[0]["name"] if items else None,
         "visits": len(transactions),
         "caf_swipes": len(swipes),
+        "nuggets": nuggets_eaten(transactions),
         "items": {item["name"]: item["qty"] for item in items},
         "spots": dict(spots),
     }

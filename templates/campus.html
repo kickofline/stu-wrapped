@@ -39,6 +39,7 @@
       {{ stat("Flex spent", "${:,.0f}".format(campus.spend), "across campus") }}
       {{ stat("Food visits", "{:,}".format(campus.visits), "paid with Flex Bucks") }}
       {{ stat("Caf swipes", "{:,}".format(campus.caf_swipes), "meal swipes") }}
+      {% if campus.nuggets %}{{ stat("Nuggets eaten", "{:,}".format(campus.nuggets), "Chick-fil-A nuggets") }}{% endif %}
       {% if campus.record_streak %}{{ stat("Longest Caf streak", campus.record_streak | string, "days in a row") }}{% endif %}
     </div>
 

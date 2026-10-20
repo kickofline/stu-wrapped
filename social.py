@@ -571,6 +571,7 @@ def campus_wrapped(students: list[dict], minimum: int = 3) -> dict | None:
         "spend": spend,
         "visits": sum(s.get("visits") or 0 for s in students),
         "caf_swipes": sum(s.get("caf_swipes") or 0 for s in students),
+        "nuggets": sum(s.get("nuggets") or 0 for s in students),
         "top_items": ranked(item_orders, item_students, 5),
         "top_spots": ranked(spot_visits, spot_students, 4),
         "busiest": busiest,
