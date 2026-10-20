@@ -201,6 +201,20 @@ def parse_swipes(html):
     return swipes
 
 
+def weekly_meal_plans(pages) -> list[str]:
+    """Meal-plan accounts that Atrium refills every week (an "Automated Reset" row in the
+    statement), e.g. "Resident Meals" or "Voluntary Full Meals". Their balance is this
+    week's swipes, not what's left for the semester like a block plan's ("Basic Meals")."""
+    weekly = []
+    for page in pages:
+        if "meal" not in page["account"].lower():
+            continue
+        rows = BeautifulSoup(page["html"], "lxml").find_all("td", class_="jsa_desc")
+        if any(row.get_text(" ", strip=True) == "Automated Reset" for row in rows):
+            weekly.append(page["account"])
+    return weekly
+
+
 def _safe_float(td):
     if td is None:
         return None

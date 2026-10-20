@@ -250,7 +250,8 @@ def create() -> None:
         key = f"test-{student.slug}"
         metadata = {"generated_at": datetime.now().isoformat(timespec="seconds"),
                     "startdate": startdate, "enddate": enddate, "name": student.name,
-                    "balances": balances, "student_key": key, "run_id": f"test-{student.slug}"}
+                    "balances": balances, "weekly_meal_plans": ["Resident Meals"],
+                    "student_key": key, "run_id": f"test-{student.slug}"}
         ai = None
         try:
             analysis.normalize(transactions)

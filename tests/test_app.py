@@ -170,7 +170,8 @@ class AppTests(unittest.TestCase):
         self.assertIsNone(plan.get("runs_out"))
         self.assertEqual(app.summary_highlights(purchases, swipes, meta)["flex_spend"], 20.0)
         self.assertEqual(app._meal_block(meta), {"name": "Basic Meals", "left": 26})
-        self.assertIsNone(app._meal_block({"balances": {"Resident Meals": 98}}))
+        self.assertIsNone(app._meal_block({"balances": {"Voluntary Full Meals": 100},
+                                           "weekly_meal_plans": ["Voluntary Full Meals"]}))
 
     def test_tiger_express_purchases_stay_off_the_leaderboard(self):
         buy = lambda where, total, item: {"date": "Sep 2, 2026 12:10PM", "location": where, "amount": -total,

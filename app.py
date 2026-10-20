@@ -30,7 +30,7 @@ from mailbox import (delete_credentials, inbox_address, is_atrium_invite, is_tag
                      load_credentials, new_tag, parse_invite, save_credentials,
                      tag_from_recipient)
 from name_map import expand_name
-from scraper import LoginFailed, LoginLimited, NoAccounts, fetch_activity
+from scraper import LoginFailed, LoginLimited, NoAccounts, fetch_activity, weekly_meal_plans
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)  # signs flash messages only
@@ -351,9 +351,11 @@ def _flex_plan(transactions: list, meta: dict, swipes: list = ()) -> dict | None
 
 def _meal_block(meta: dict) -> dict | None:
     """Swipes left on a block meal plan ("Basic Meals": a fixed number for the semester).
-    Resident plans reset weekly, so their balance isn't a count worth showing."""
+    Weekly plans ("weekly_meal_plans": the statement shows Atrium refilling them) only hold
+    this week's swipes, so their balance isn't a count worth showing."""
+    weekly = meta.get("weekly_meal_plans") or []
     for name, left in (meta.get("balances") or {}).items():
-        if "meal" in name.lower() and not name.lower().startswith("resident"):
+        if "meal" in name.lower() and name not in weekly:
             return {"name": name, "left": int(left)}
     return None
 
@@ -449,6 +451,7 @@ def _wrap(job_id: str, tag: str, invite: dict) -> None:
         "startdate": startdate, "enddate": enddate,
         "name": invite.get("name"),
         "balances": balances,
+        "weekly_meal_plans": weekly_meal_plans(pages),
         "student_key": student,
         "run_id": job_id,
     }

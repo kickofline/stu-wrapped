@@ -3,7 +3,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import scraper
-from scraper import parse_swipes
+from scraper import parse_swipes, weekly_meal_plans
 
 # Trimmed from a real Resident Meals statement: a Caf swipe, a meal exchange at another
 # counter (itemized receipt inside <details>), and the weekly positive reset.
@@ -34,6 +34,13 @@ class ScraperTests(unittest.TestCase):
             {"date": "Oct 19, 2026 08:21AM", "location": "Commons PAX 4"},
             {"date": "Sep 29, 2026 12:23PM", "location": "Tiger Exp 1"},
         ])
+
+    def test_only_meal_plans_atrium_refills_count_as_weekly(self):
+        block = MEAL_STATEMENT.replace("Automated Reset", "Deposit")
+        pages = [{"account": "Voluntary Full Meals", "html": MEAL_STATEMENT},
+                 {"account": "Basic Meals", "html": block},
+                 {"account": "Resident Flex", "html": MEAL_STATEMENT}]
+        self.assertEqual(weekly_meal_plans(pages), ["Voluntary Full Meals"])
 
     def test_page_loads_retry_atrium_server_errors_but_the_login_post_does_not(self):
         hits = {"GET": 0, "POST": 0}
