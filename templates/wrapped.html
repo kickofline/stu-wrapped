@@ -313,6 +313,26 @@
     </div></section>
     {% endif %}
 
+    <!-- ── Campus medals: 1st/2nd/3rd on campus in a category ── -->
+    {% if medals %}
+    <section class="slide t-orange l2" data-slide="medals"><div class="frame">
+      {{ blobs() }}
+      <div class="body center">
+        <p class="eyebrow">Campus medals</p>
+        <h2 class="display ac" style="--fs: {{ 84 if medals | length < 3 else 68 }}">{% if medals[0].place == 1 %}Number<br>one.{% else %}On the<br>podium.{% endif %}</h2>
+        <div class="badge-stack">
+          {% for m in medals %}
+          <div class="badge-row medal-row">
+            <strong aria-label="{{ m.rank }} place">{{ m.medal }}</strong>
+            <div><h3>{{ m.rank }} on campus · {{ m.label }}</h3><p>{{ m.detail }}</p></div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {{ foot() }}
+    </div></section>
+    {% endif %}
+
     <!-- ── Campus percentiles (three-student minimum) ───────── -->
     {% if campus %}
     <section class="slide t-pink l4" data-slide="rankings"><div class="frame">

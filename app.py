@@ -21,7 +21,7 @@ import analysis
 import analytics
 import og_image
 from insights import NOT_SPOTS, flex_paid, parse_when, spot_name, time_insights
-from social import (campus_activity, campus_percentiles, campus_wrapped, dining_badges,
+from social import (campus_activity, campus_medals, campus_percentiles, campus_wrapped, dining_badges,
                     dining_streaks, friend_match, nuggets_eaten, roast_facts, signature_order,
                     summary_highlights, tiger_express, treat_counts)
 from jobs import (claim, claim_waiting, cleanup_old_jobs, fail, finish, get_job,
@@ -746,6 +746,8 @@ def _wrapped_context(share_id: str) -> dict:
 
     current = _student_summary(transactions, result.get("swipes", []))
     current["flex_short"] = _flex_short(transactions, meta, result.get("swipes", []))
+    current["caf_streak"] = campus_activity(_leaderboard_purchases(transactions), result.get("swipes", []),
+                                            start.year)["caf_streak"]
     stored = _load_stats()["students"]
     student_key = meta.get("student_key")
     students = []
@@ -759,6 +761,7 @@ def _wrapped_context(share_id: str) -> dict:
     if not replaced:
         students.append(current)
     campus = campus_percentiles(current, students)
+    medals = campus_medals(current, students)
     usual = signature_order(transactions)
     badges = dining_badges(transactions, result.get("swipes", []), meta)
     summary = summary_highlights(transactions, result.get("swipes", []), meta)
@@ -788,6 +791,7 @@ def _wrapped_context(share_id: str) -> dict:
         "flex_paid": round(sum(flex_paid(tx) for tx in transactions), 2),
         "ai": result.get("analysis"),
         "campus": campus,
+        "medals": medals,
         "usual": usual,
         "badges": badges,
         "streaks": dining_streaks(transactions, result.get("swipes", []), meta),
@@ -828,8 +832,8 @@ SLIDE_TITLES = {
     "usual": "Usual order", "nuggets": "Nugget count", "personality": "Dining personality", "badges": "Badges",
     "spots": "Favorite spots", "earliest-latest": "Earliest & latest bite", "caf-swipes": "Caf swipes",
     "tiger-express": "Tiger Express", "streak": "Caf streak", "flex-left": "Flex Bucks",
-    "roast": "The roast", "money-talk": "Money talk", "rankings": "Campus rankings",
-    "summary": "Semester recap",
+    "roast": "The roast", "money-talk": "Money talk", "medals": "Campus medals",
+    "rankings": "Campus rankings", "summary": "Semester recap",
 }
 SLIDE_IMAGE_MAX_BYTES = 4 * 1024 * 1024
 

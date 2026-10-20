@@ -392,6 +392,39 @@ def _percentile(values: list[float], value: float) -> dict:
     }
 
 
+# Categories a student can medal in: (stats field, label, how to show their number).
+MEDAL_CATEGORIES = (
+    ("caf_swipes", "Caf swipes", lambda v: f"{v:g} meal swipes"),
+    ("caf_streak", "Caf streak", lambda v: f"{v:g} days in a row"),
+    ("visits", "Food runs", lambda v: f"{v:g} Flex visits"),
+    ("total_spend", "Flex spent", lambda v: f"${v:,.2f}"),
+    ("unique_items", "Menu explorer", lambda v: f"{v:g} different items"),
+    ("nuggets", "Nuggets eaten", lambda v: f"{v:g} nuggets"),
+    ("coffee", "Coffee drinks", lambda v: f"{v:g} coffee drinks"),
+    ("energy", "Energy drinks", lambda v: f"{v:g} energy drinks"),
+    ("desserts", "Desserts", lambda v: f"{v:g} desserts"),
+)
+MEDALS = ("🥇", "🥈", "🥉")
+
+
+def campus_medals(current: dict, students: list[dict], minimum: int = 5) -> list[dict]:
+    """Categories where this student is 1st, 2nd or 3rd on campus. A category only counts
+    once `minimum` students have some of it; ties share a place (two firsts, then third)."""
+    medals = []
+    for field, label, detail in MEDAL_CATEGORIES:
+        value = current.get(field)
+        if not isinstance(value, (int, float)) or value <= 0:
+            continue
+        values = [s[field] for s in students if isinstance(s.get(field), (int, float)) and s[field] > 0]
+        if len(values) < minimum:
+            continue
+        place = 1 + sum(other > value for other in values)
+        if place <= 3:
+            medals.append({"place": place, "medal": MEDALS[place - 1],
+                           "rank": ("1st", "2nd", "3rd")[place - 1], "label": label, "detail": detail(value)})
+    return sorted(medals, key=lambda m: m["place"])
+
+
 def campus_percentiles(current: dict, students: list[dict], minimum: int = 3) -> list[dict]:
     """Strong campus ranks, shown only once at least three students qualify."""
     if len(students) < minimum:

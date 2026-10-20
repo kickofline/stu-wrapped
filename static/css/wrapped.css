@@ -144,6 +144,7 @@ body:has(.viewer) { transition: background-color .5s ease; }
 .badge-row p, .rank-row p { margin-top: calc(4 * var(--u)); font-size: calc(16 * var(--u)); font-weight: 700; line-height: 1.25; opacity: .75; }
 .rank-row { grid-template-columns: calc(110 * var(--u)) 1fr; }
 .rank-row > strong { font-family: var(--display); font-size: calc(28 * var(--u)); line-height: .95; color: var(--ac); }
+.medal-row > strong { background: rgba(255,255,255,.9); font-size: calc(36 * var(--u)); }
 
 /* summary card */
 .summary .eyebrow.plain { color: var(--fg); }

@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timedelta
 
-from social import (campus_percentiles, campus_wrapped, dining_badges, dining_streaks,
+from social import (campus_medals, campus_percentiles, campus_wrapped, dining_badges, dining_streaks,
                     friend_match, nuggets_eaten, signature_order, summary_highlights, tiger_express)
 
 
@@ -20,6 +20,17 @@ class SocialInsightsTests(unittest.TestCase):
         self.assertTrue(ranks)
         self.assertTrue(all(rank["top"] == 33 for rank in ranks))
         self.assertEqual(ranks[0]["label"], "Matcha Latte fans")
+
+    def test_medals_for_top_three_with_shared_places_and_a_minimum(self):
+        swipes = [100, 100, 90, 80, 70, 0]
+        students = [{"caf_swipes": s, "nuggets": 50 if i < 4 else 0} for i, s in enumerate(swipes)]
+        tied_first = campus_medals(students[0], students)
+        self.assertEqual([(m["rank"], m["label"]) for m in tied_first], [("1st", "Caf swipes")])
+        self.assertEqual(campus_medals(students[2], students)[0]["rank"], "3rd")  # two firsts, then third
+        self.assertEqual(campus_medals(students[3], students), [])  # 4th: no medal
+        self.assertEqual(campus_medals(students[5], students), [])  # none of it: no medal
+        # Nuggets: only four students have any, under the five-student minimum.
+        self.assertNotIn("Nuggets eaten", [m["label"] for m in campus_medals(students[0], students)])
 
     def test_signature_order_combines_an_exact_repeated_basket(self):
         repeated = {
