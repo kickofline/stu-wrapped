@@ -154,9 +154,11 @@ def summary_highlights(transactions: list, swipes: list, metadata: dict) -> dict
 
 COFFEE_WORDS = ("latte", "macchiato", "mocha", "coffee", "london fog", "frapjack", "americano",
                 "cappuccino", "cold brew", "espresso", "chai")
+COFFEE_SKIP = ("matcha", "hot chocolate")
 ENERGY_WORDS = ("alani", "celsius", "red bull", "bloom", "energy", "monster")
 DESSERT_WORDS = ("cookie", "shake", "brownie", "ice cream", "frosted", "sopapilla", "donut", "cake",
                  "gummies", "sour patch")
+DESSERT_SKIP = ("muscle milk",)
 # A Flex purchase this soon after a Caf swipe is a second meal on top of the Caf one.
 SECOND_DINNER_WINDOW = timedelta(minutes=90)
 _SIZE = re.compile(r"^(?:\d+\s*oz|small|medium|large|meal)$", re.IGNORECASE)
@@ -175,6 +177,15 @@ def _count_matching(transactions: list, words: tuple, skip: tuple = ()) -> tuple
                                    if p.strip() and not _SIZE.match(p.strip()))
                 kinds.add((name, flavor))
     return count, len(kinds)
+
+
+def treat_counts(transactions: list) -> dict:
+    """Coffee drinks, energy drinks and desserts bought, counted like their badges."""
+    return {
+        "coffee": _count_matching(transactions, COFFEE_WORDS, COFFEE_SKIP)[0],
+        "energy": _count_matching(transactions, ENERGY_WORDS)[0],
+        "desserts": _count_matching(transactions, DESSERT_WORDS, DESSERT_SKIP)[0],
+    }
 
 
 def nuggets_eaten(transactions: list) -> int:
@@ -236,7 +247,7 @@ def dining_badges(transactions: list, swipes: list, metadata: dict) -> list[dict
     if matcha >= 3:
         add(90 + matcha, "matcha", "M", "Matcha Machine", f"{matcha} matcha drinks and counting.")
 
-    coffee, _ = _count_matching(transactions, COFFEE_WORDS, skip=("matcha", "hot chocolate"))
+    coffee, _ = _count_matching(transactions, COFFEE_WORDS, COFFEE_SKIP)
     if coffee >= 10:
         add(84 + min(coffee, 20) / 2, "coffee", "JOE", "Caffeine Dependent", f"{coffee} coffee drinks this semester.")
 
@@ -309,7 +320,7 @@ def dining_badges(transactions: list, swipes: list, metadata: dict) -> list[dict
         add(74 + min(double_days, 30) / 3, "double-back", "DBL", "Double Back",
             f"{double_days} days you came back for more.")
 
-    desserts, _ = _count_matching(transactions, DESSERT_WORDS, skip=("muscle milk",))
+    desserts, _ = _count_matching(transactions, DESSERT_WORDS, DESSERT_SKIP)
     if desserts >= 6:
         add(72 + desserts, "sweet-tooth", "YUM", "Sweet Tooth", f"{desserts} desserts and sweets.")
 
@@ -563,15 +574,32 @@ def campus_wrapped(students: list[dict], minimum: int = 3) -> dict | None:
     if timed >= minimum and sum(weekdays):
         day = max(range(7), key=lambda i: (weekdays[i], -i))
         hour = max(range(24), key=lambda h: (hours[h], -h))
+        active = [h for h in range(24) if hours[h]]
         busiest = {"day": WEEKDAYS[day], "hour": _hour_label(hour),
-                   "weekdays": [{"day": WEEKDAYS[i], "count": weekdays[i]} for i in range(7)]}
+                   "weekdays": [{"day": WEEKDAYS[i], "count": weekdays[i]} for i in range(7)],
+                   # Open hours only: from the first hour anyone bought or swiped to the last.
+                   "hours": [{"hour": _hour_label(h), "count": hours[h]}
+                             for h in range(active[0], active[-1] + 1)]}
+
+    def shared_total(key: str) -> int:
+        """Campus total of a per-student count, or 0 until `minimum` students have some."""
+        counts = [s.get(key) or 0 for s in students]
+        return sum(counts) if sum(1 for c in counts if c) >= minimum else 0
+
     spend = round(sum(s.get("total_spend") or 0 for s in students), 2)
+    visits = sum(s.get("visits") or 0 for s in students)
     record = max((s.get("caf_streak") or 0 for s in students), default=0)
     return {
         "spend": spend,
-        "visits": sum(s.get("visits") or 0 for s in students),
+        "avg_spend": spend / len(students),
+        "avg_order": spend / visits if visits else None,
+        "visits": visits,
         "caf_swipes": sum(s.get("caf_swipes") or 0 for s in students),
-        "nuggets": sum(s.get("nuggets") or 0 for s in students),
+        "menu_items": len(item_orders),
+        "nuggets": shared_total("nuggets"),
+        "coffee": shared_total("coffee"),
+        "energy": shared_total("energy"),
+        "desserts": shared_total("desserts"),
         "top_items": ranked(item_orders, item_students, 5),
         "top_spots": ranked(spot_visits, spot_students, 4),
         "busiest": busiest,

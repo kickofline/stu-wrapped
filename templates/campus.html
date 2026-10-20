@@ -38,9 +38,16 @@
     {% macro stat(label, value, note) %}<div class="card"><p class="card-label">{{ label }}</p><strong style="--chars: {{ value | length }}">{{ value }}</strong><p>{{ note }}</p></div>{% endmacro %}
     <div class="campus-stats">
       {{ stat("Flex spent", "${:,.0f}".format(campus.spend), "across campus") }}
+      {{ stat("Per student", "${:,.0f}".format(campus.avg_spend), "average Flex spent") }}
+      {% if campus.avg_order %}{{ stat("Average order", "${:,.2f}".format(campus.avg_order), "per Flex visit") }}{% endif %}
       {{ stat("Food visits", "{:,}".format(campus.visits), "paid with Flex Bucks") }}
       {{ stat("Caf swipes", "{:,}".format(campus.caf_swipes), "meal swipes") }}
+      {{ stat("Menu items", "{:,}".format(campus.menu_items), "different things ordered") }}
       {% if campus.nuggets %}{{ stat("Nuggets eaten", "{:,}".format(campus.nuggets), "Chick-fil-A nuggets") }}{% endif %}
+      {% if campus.coffee %}{{ stat("Coffee drinks", "{:,}".format(campus.coffee), "lattes, mochas & more") }}{% endif %}
+      {% if campus.energy %}{{ stat("Energy drinks", "{:,}".format(campus.energy), "Alani, Celsius & co.") }}{% endif %}
+      {% if campus.desserts %}{{ stat("Desserts", "{:,}".format(campus.desserts), "cookies, shakes & sweets") }}{% endif %}
+      {% if flex_campus is not none %}{{ stat("Running low", "{}%".format(flex_campus), "on pace to run out of Flex before finals") }}{% endif %}
       {% if campus.record_streak %}{{ stat("Longest Caf streak", campus.record_streak | string, "days in a row") }}{% endif %}
     </div>
 
@@ -64,6 +71,9 @@
       <h2>{{ campus.busiest.day }}s around {{ campus.busiest.hour }}</h2>
       {% set most = campus.busiest.weekdays | map(attribute='count') | max %}
       <div class="week-bars">{% for w in campus.busiest.weekdays %}<div><i style="--h: {{ (w.count / (most or 1) * 100) | round(1) }}%"></i>{{ w.day[:3] }}</div>{% endfor %}</div>
+      {% set peak = campus.busiest.hours | map(attribute='count') | max %}
+      <p class="card-label hour-label">By hour</p>
+      <div class="week-bars hour-bars" style="--n: {{ campus.busiest.hours | length }}">{% for h in campus.busiest.hours %}<div title="{{ h.hour }}: {{ '{:,}'.format(h.count) }}"><i style="--h: {{ (h.count / (peak or 1) * 100) | round(1) }}%"></i><span>{{ h.hour | replace(' AM', 'a') | replace(' PM', 'p') }}</span></div>{% endfor %}</div>
     </section>
     {% endif %}
     {% else %}

@@ -291,9 +291,16 @@ body:has(.compare-page):has(.flash) .compare-shell { padding-top: 6.5rem; }
 .week-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: .5rem; height: 120px; }
 .week-bars div { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: .35rem; font-weight: 800; font-size: .85rem; }
 .week-bars i { width: 100%; height: var(--h); min-height: 4px; background: var(--lime); border-radius: 6px; }
+.hour-label { margin-top: 1.4rem; }
+.hour-bars { grid-template-columns: repeat(var(--n), 1fr); gap: 3px; }
+.hour-bars div { font-size: .7rem; }
+.hour-bars i { border-radius: 3px; }
+/* Label every other hour so the row stays readable on phones. */
+.hour-bars div:nth-child(even) span { visibility: hidden; }
 
 @media (max-width: 620px) {
   .invite-card { align-items: flex-start; flex-direction: column; }
   .profiles { grid-template-columns: 1fr; grid-template-rows: none; row-gap: 1rem; }
   .friend-profile { display: block; grid-row: auto; }
+  .campus-stats { grid-template-columns: 1fr 1fr; gap: .75rem; }
 }

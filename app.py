@@ -23,7 +23,7 @@ import og_image
 from insights import NOT_SPOTS, flex_paid, parse_when, spot_name, time_insights
 from social import (campus_activity, campus_percentiles, campus_wrapped, dining_badges,
                     dining_streaks, friend_match, nuggets_eaten, roast_facts, signature_order,
-                    summary_highlights, tiger_express)
+                    summary_highlights, tiger_express, treat_counts)
 from jobs import (claim, claim_waiting, cleanup_old_jobs, fail, finish, get_job,
                   job_for, update_progress)
 from mailbox import (delete_credentials, inbox_address, is_atrium_invite, is_tag,
@@ -264,6 +264,7 @@ def _student_summary(transactions: list, swipes: list) -> dict:
         "visits": len(transactions),
         "caf_swipes": len(swipes),
         "nuggets": nuggets_eaten(transactions),
+        **treat_counts(transactions),
         "items": {item["name"]: item["qty"] for item in items},
         "spots": dict(spots),
     }
@@ -616,7 +617,7 @@ def campus_page():
     back_url = (url_for("wrapped", share_id=from_id, at=at if at in RETURN_SLIDES else None)
                 if _result_meta(from_id) else None)
     return render_template(
-        "campus.html", campus=campus_wrapped(students),
+        "campus.html", campus=campus_wrapped(students), flex_campus=_flex_campus(students),
         semester_label=_semester_dates()[2],
         canonical=url_for("campus_page", _external=True, _scheme="https"),
         back_url=back_url,
