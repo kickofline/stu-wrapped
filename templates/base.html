@@ -13,16 +13,16 @@
   <meta name="theme-color" content="#1e3264">
   <meta name="description" content="{{ site_description }}">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="{{ site_name }}">
-  <meta property="og:description" content="{{ site_description }}">
-  <meta property="og:image" content="{{ url_for('og_site', _external=True, _scheme='https') }}">
+  <meta property="og:title" content="{{ share_title }}">
+  <meta property="og:description" content="{{ share_description }}">
+  <meta property="og:image" content="{{ url_for('static', filename='og-home.png', _external=True, _scheme='https') }}">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="OBU Stu Wrapped: your semester in food">
+  <meta property="og:image:alt" content="What did you actually eat this semester? OBU Stu Wrapped at stu.exposed">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="{{ site_name }}">
-  <meta name="twitter:description" content="{{ site_description }}">
-  <meta name="twitter:image" content="{{ url_for('og_site', _external=True, _scheme='https') }}">
+  <meta name="twitter:title" content="{{ share_title }}">
+  <meta name="twitter:description" content="{{ share_description }}">
+  <meta name="twitter:image" content="{{ url_for('static', filename='og-home.png', _external=True, _scheme='https') }}">
   {% endblock %}
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon-192.png') }}">

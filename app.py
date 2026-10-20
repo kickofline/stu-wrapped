@@ -56,11 +56,16 @@ _stats_lock = threading.Lock()
 SITE_NAME = "OBU Stu Wrapped"
 SITE_DESCRIPTION = ("Your Ouachita Baptist University dining semester, wrapped: top CFA orders, "
                     "Dr. Jack's lattes, Caf swipes and Flex Bucks spending. Free for OBU students.")
+# What a shared stu.exposed link shows in iMessage, Yik Yak, Discord...: a hook, not the site name.
+SHARE_TITLE = "What did you actually eat this semester?"
+SHARE_DESCRIPTION = ("Get your OBU Stu Wrapped: your #1 obsession, your Caf streak, your nugget count "
+                     "and the day your Flex runs out. Free, takes a minute.")
 
 
 @app.context_processor
 def _site_meta():
-    return {"site_name": SITE_NAME, "site_description": SITE_DESCRIPTION}
+    return {"site_name": SITE_NAME, "site_description": SITE_DESCRIPTION,
+            "share_title": SHARE_TITLE, "share_description": SHARE_DESCRIPTION}
 
 
 # Pages that show one visitor's inbox address, Wrapped or status: never cache them.
