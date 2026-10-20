@@ -208,6 +208,17 @@ class AppTests(unittest.TestCase):
         self.assertEqual(friend.get("/og/slideshare12/roast.png").data, png)
         self.assertEqual(friend.get("/wrapped/slideshare12/nonsense").status_code, 302)
 
+    def test_leaderboard_back_button_returns_to_the_wrapped_slide(self):
+        self._save_result("backshare123")
+        client = app.app.test_client()
+        page = client.get("/campus?from=backshare123&at=rankings").get_data(as_text=True)
+        self.assertIn('href="/wrapped/backshare123?at=rankings"', page)
+        self.assertIn('const START_SLIDE = "rankings"', client.get("/wrapped/backshare123?at=rankings").get_data(as_text=True))
+        # Unknown Wrappeds and slides fall back: home page, and the deck's first slide.
+        self.assertIn('href="/">← Back to Stu Wrapped', client.get("/campus?from=nosuchshare1&at=rankings").get_data(as_text=True))
+        self.assertIn('href="/wrapped/backshare123"', client.get("/campus?from=backshare123&at=evil").get_data(as_text=True))
+        self.assertIn("const START_SLIDE = null", client.get("/wrapped/backshare123?at=evil").get_data(as_text=True))
+
 
 if __name__ == "__main__":
     unittest.main()

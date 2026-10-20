@@ -28,7 +28,8 @@
 <main class="compare-page campus-page">
   <i class="blob b1"></i><i class="blob b2"></i>
   <div class="compare-shell wide">
-    <a class="btn-secondary campus-back" href="{{ url_for('index') }}">← Back to Stu Wrapped</a>
+    {% if back_url %}<a class="btn-secondary campus-back" href="{{ back_url }}">← Back to the Wrapped</a>
+    {% else %}<a class="btn-secondary campus-back" href="{{ url_for('index') }}">← Back to Stu Wrapped</a>{% endif %}
     <p class="eyebrow">{{ semester_label }}</p>
     <h1 class="display">CAMPUS<br>LEADERBOARD</h1>
     {% if campus %}

@@ -328,7 +328,7 @@
           </div>
           {% endfor %}
         </div>
-        <a class="btn-secondary slide-link" href="{{ url_for('campus_page') }}">See the Campus Leaderboard →</a>
+        <a class="btn-secondary slide-link" href="{{ url_for('campus_page', **{'from': share_id, 'at': 'rankings'}) }}">See the Campus Leaderboard →</a>
       </div>
       {{ foot() }}
     </div></section>
@@ -398,7 +398,7 @@
           <button class="{{ 'btn-secondary' if viewer.versus_url else 'btn-primary' }} js-share-link">Share my Wrapped</button>
           <a class="btn-secondary" href="{{ dashboard_url }}">All my items</a>
           <a class="btn-secondary" href="{{ compare_url }}">Compare with a friend</a>
-          <a class="btn-secondary" href="{{ url_for('campus_page') }}">Campus Leaderboard</a>
+          <a class="btn-secondary" href="{{ url_for('campus_page', **{'from': share_id, 'at': 'outro'}) }}">Campus Leaderboard</a>
         </div>
         {% else %}
         {% set them = first_name or "them" %}
@@ -406,7 +406,7 @@
         <p class="lead">{% if viewer.versus_url %}See how your semester stacks up against {{ them }}.{% else %}Get your own Wrapped, then see how you compare with {{ them }}.{% endif %}</p>
         <div class="outro-actions">
           <a class="btn-primary cta-big" href="{{ viewer.versus_url or viewer.get_own_url }}">{% if viewer.versus_url %}See you vs {{ them }} →{% else %}Get my own →{% endif %}</a>
-          <a class="btn-secondary" href="{{ url_for('campus_page') }}">Campus Leaderboard</a>
+          <a class="btn-secondary" href="{{ url_for('campus_page', **{'from': share_id, 'at': 'outro'}) }}">Campus Leaderboard</a>
         </div>
         {% endif %}
       </div>

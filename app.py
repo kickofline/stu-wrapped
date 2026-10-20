@@ -611,10 +611,15 @@ def campus_page():
     students = list(_load_stats()["students"].values())
     if not analytics.is_bot(request.user_agent.string):
         analytics.record("campus_view", visitor=analytics.visitor_id(request.cookies.get(INBOX_COOKIE)))
+    # Opened from a Wrapped (?from=<share_id>&at=<slide>): Back returns to that slide.
+    from_id, at = request.args.get("from"), request.args.get("at")
+    back_url = (url_for("wrapped", share_id=from_id, at=at if at in RETURN_SLIDES else None)
+                if _result_meta(from_id) else None)
     return render_template(
         "campus.html", campus=campus_wrapped(students),
         semester_label=_semester_dates()[2],
         canonical=url_for("campus_page", _external=True, _scheme="https"),
+        back_url=back_url,
     )
 
 
@@ -844,7 +849,11 @@ def _uploaded_slides(share_id: str) -> list[str]:
     return [slide for slide in SLIDE_TITLES if os.path.exists(_slide_image_path(share_id, slide))]
 
 
-def _render_wrapped(share_id: str, slide: str | None = None) -> Response:
+# Slides that link out (to the Campus Leaderboard) and so can be returned to with ?at=.
+RETURN_SLIDES = {"rankings", "outro"}
+
+
+def _render_wrapped(share_id: str, slide: str | None = None, start: str | None = None) -> Response:
     ctx = _wrapped_context(share_id)
     viewer = _viewer(share_id)
     if not analytics.is_bot(request.user_agent.string):
@@ -866,7 +875,7 @@ def _render_wrapped(share_id: str, slide: str | None = None) -> Response:
         **ctx,
         viewer=viewer,
         og=og,
-        start_slide=slide,
+        start_slide=slide or start,
         uploaded_slides=_uploaded_slides(share_id) if viewer["owner"] else [],
         dashboard_url=url_for("results", share_id=share_id),
         share_url=share_url,
@@ -880,7 +889,9 @@ def _render_wrapped(share_id: str, slide: str | None = None) -> Response:
 
 @app.get("/wrapped/<share_id>")
 def wrapped(share_id):
-    return _render_wrapped(share_id)
+    # ?at=<slide> reopens the deck where the viewer left it (e.g. back from the leaderboard).
+    at = request.args.get("at")
+    return _render_wrapped(share_id, start=at if at in RETURN_SLIDES else None)
 
 
 @app.get("/wrapped/<share_id>/<slide>")
