@@ -43,14 +43,14 @@
     {% else %}
     <form method="POST" action="{{ url_for('start') }}">
       <ol class="steps">
-        <li>
+        <li class="setup-step">
           <p class="eyebrow">1 · Copy your guest email</p>
           <div class="chip" role="button" tabindex="0" aria-label="Copy your guest email" onclick="copyAddr()" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); copyAddr(); }">
             <code id="plus-addr-text">{{ inbox_address }}</code>
             <button type="button" id="copy-btn" tabindex="-1">Copy</button>
           </div>
         </li>
-        <li>
+        <li class="setup-step">
           <p class="eyebrow">2 · Add it as a Flex Bucks guest</p>
           <a class="pill pill-light" href="https://connectobu.atriumcampus.com/guestaccess.php" target="_blank" rel="noopener" onclick="markFlexOpened()">Open Flex Bucks ↗</a>
           <ol class="guide">
@@ -58,11 +58,13 @@
             <li><p><b>b</b> Open <strong>Friend/Relative Access</strong> and tap <strong>ADD</strong>.</p><img src="{{ url_for('static', filename='help/friend-relative-access.webp') }}" alt="Friend/Relative Access page with the purple ADD button" width="775" height="585" loading="lazy"></li>
             <li><p><b>c</b> Paste your email, leave the boxes checked, tap <strong>ADD</strong>.</p><img src="{{ url_for('static', filename='help/guest-permissions.webp') }}" alt="Guest form with the email box, checked permissions and ADD button" width="520" height="835" loading="lazy"></li>
           </ol>
+          <a class="pill pill-light guide-open" href="https://connectobu.atriumcampus.com/guestaccess.php" target="_blank" rel="noopener" onclick="markFlexOpened()">Open Flex Bucks ↗</a>
           <p class="guide-note">Atrium says it's already added? You're set. Go to step 3.</p>
         </li>
-        <li>
-          <p class="eyebrow">3 · Come back and get your Wrapped</p>
-          <button type="submit" class="btn-primary cta">Make my Wrapped</button>
+        <li class="go-step">
+          <p class="eyebrow"><span class="when-new">3 · Come back and get your Wrapped</span><span class="when-back">Added it? You're ready.</span></p>
+          <button type="submit" class="btn-primary cta"><span class="when-new">Make my Wrapped</span><span class="when-back">GO →</span></button>
+          <button type="button" class="link-button when-back show-steps" onclick="setCameBack(false)">Haven't added it yet? Show the steps</button>
         </li>
       </ol>
     </form>
@@ -85,16 +87,39 @@
     });
   }
 
+  // Back from Flex Bucks: reload (the guest login may have arrived) and, if this is still the
+  // setup page, skip straight to a big GO; GO waits for the login if it's a few seconds behind.
+  const CAME_BACK = 'stu-wrapped-came-back';
+
+  function setCameBack(on) {
+    const landing = document.querySelector('.landing');
+    landing.classList.toggle('came-back', on);
+    try { on ? sessionStorage.setItem(CAME_BACK, '1') : sessionStorage.removeItem(CAME_BACK); } catch (_) {}
+    if (on) window.scrollTo(0, 0);
+  }
+
   function markFlexOpened() {
     track('flex_link_opened');
     try { sessionStorage.setItem('stu-wrapped-check-login', '1'); } catch (_) {}
   }
+
+  try {
+    if (sessionStorage.getItem(CAME_BACK) === '1') {
+      if (document.querySelector('.steps')) {
+        history.scrollRestoration = 'manual';
+        setCameBack(true);
+      } else {
+        sessionStorage.removeItem(CAME_BACK);  // the login arrived: this page already has GO
+      }
+    }
+  } catch (_) {}
 
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) return;
     try {
       if (sessionStorage.getItem('stu-wrapped-check-login') === '1') {
         sessionStorage.removeItem('stu-wrapped-check-login');
+        sessionStorage.setItem(CAME_BACK, '1');
         window.location.reload();
       }
     } catch (_) {}
