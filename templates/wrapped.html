@@ -100,6 +100,20 @@
     </div></section>
     {% endif %}
 
+    <!-- ── Nugget count ─────────────────────────────────────── -->
+    {% if nuggets %}
+    <section class="slide t-orange l1" data-slide="nuggets"><div class="frame">
+      {{ blobs() }}
+      <div class="body center">
+        <p class="eyebrow">Nugget count</p>
+        <p class="display ac" style="--fs: 150">{{ nuggets }}</p>
+        <p class="lead">Chick-fil-A nuggets this semester.</p>
+        <p class="sub">That's {{ (nuggets / 12) | round(0, 'floor') | int }} twelve-counts' worth.</p>
+      </div>
+      {{ foot() }}
+    </div></section>
+    {% endif %}
+
     <!-- ── Dining personality ────────────────────────────────── -->
     {% if ai %}
     <section class="slide t-purple l4" data-slide="personality"><div class="frame">
@@ -263,6 +277,11 @@
           {% else %}At that pace you'll finish with <b>{{ money(flex.projected_left) }}</b> left.{% endif %}
         </p>
         {% endif %}
+        {% endif %}
+        {% if flex_campus is not none and (flex.ran_out or flex.runs_out) %}
+        <p class="sub">You're not alone: {{ flex_campus }}% of students are on pace to run out before {{ flex.end }}.</p>
+        {% elif flex_campus is not none %}
+        <p class="sub">{{ flex_campus }}% of students are on pace to run out before {{ flex.end }}. Not you.</p>
         {% endif %}
       </div>
       {{ foot() }}

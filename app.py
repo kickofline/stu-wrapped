@@ -22,8 +22,8 @@ import analytics
 import og_image
 from insights import NOT_SPOTS, flex_paid, parse_when, spot_name, time_insights
 from social import (campus_activity, campus_percentiles, campus_wrapped, dining_badges,
-                    dining_streaks, friend_match, signature_order, summary_highlights,
-                    tiger_express)
+                    dining_streaks, friend_match, nuggets_eaten, roast_facts, signature_order,
+                    summary_highlights, tiger_express)
 from jobs import (claim, claim_waiting, cleanup_old_jobs, fail, finish, get_job,
                   job_for, update_progress)
 from mailbox import (delete_credentials, inbox_address, is_atrium_invite, is_tag,
@@ -268,16 +268,34 @@ def _student_summary(transactions: list, swipes: list) -> dict:
     }
 
 
-def _record_run(transactions: list, swipes: list, student_key: str, year: int) -> None:
+def _flex_short(transactions: list, meta: dict, swipes: list) -> bool | None:
+    """Whether this student's Flex runs out (or already ran out) before finals end;
+    None when there's no Flex plan to judge."""
+    plan = _flex_plan(transactions, meta, swipes)
+    return None if plan is None else bool(plan.get("runs_out") or plan.get("ran_out"))
+
+
+def _record_run(transactions: list, swipes: list, student_key: str, metadata: dict) -> None:
     """Store this student's latest run in the campus-wide comparison stats."""
     summary = _student_summary(transactions, swipes)
-    summary.update(campus_activity(_leaderboard_purchases(transactions), swipes, year))
+    summary.update(campus_activity(_leaderboard_purchases(transactions), swipes,
+                                   date.fromisoformat(metadata["startdate"]).year))
+    summary["flex_short"] = _flex_short(transactions, metadata, swipes)
     summary["updated"] = datetime.now().isoformat(timespec="seconds")
     with _stats_lock:
         _record_raw_items(transactions)
         stats = _read_stats()
         stats["students"][student_key] = summary
         _save_stats(stats)
+
+
+def _flex_campus(students: list) -> int | None:
+    """Percent of students on pace to run out of Flex before finals, once at least three
+    students have a Flex plan to judge (so no single student's plan shows through)."""
+    judged = [s["flex_short"] for s in students if s.get("flex_short") is not None]
+    if len(judged) < 3:
+        return None
+    return round(sum(judged) / len(judged) * 100)
 
 
 def _semester_dates() -> tuple[str, str, str]:
@@ -466,7 +484,7 @@ def _wrap(job_id: str, tag: str, invite: dict) -> None:
 
     update_progress(job_id, 6, "Wrapping it up…")
     share_id = _save_result(transactions, swipes, metadata, ai)
-    _record_run(transactions, swipes, student, date.fromisoformat(startdate).year)
+    _record_run(transactions, swipes, student, metadata)
     analytics.record("wrap_finished", visitor=analytics.visitor_id(tag), student=student, share_id=share_id,
                      name=invite.get("name"), purchases=len(transactions), swipes=len(swipes), ai=ai is not None)
     finish(job_id, share_id)
@@ -528,6 +546,7 @@ def _summary(transactions: list, swipes: list, metadata: dict, label: str) -> di
             "earliest": swipe_stats["earliest"],
             "latest": swipe_stats["latest"],
         },
+        **roast_facts(transactions, swipes, metadata),
     }
 
 
@@ -720,6 +739,7 @@ def _wrapped_context(share_id: str) -> dict:
     swipes = time_insights(result.get("swipes", []), meta["startdate"], meta["enddate"])
 
     current = _student_summary(transactions, result.get("swipes", []))
+    current["flex_short"] = _flex_short(transactions, meta, result.get("swipes", []))
     stored = _load_stats()["students"]
     student_key = meta.get("student_key")
     students = []
@@ -756,6 +776,8 @@ def _wrapped_context(share_id: str) -> dict:
         "swipe_top_meal": max(swipes["meal_totals"], key=lambda m: m["count"])["meal"] if swipes else None,
         "tiger": tiger_express(result.get("swipes", []), meta),
         "flex": _flex_plan(transactions, meta, result.get("swipes", [])),
+        "flex_campus": _flex_campus(students),
+        "nuggets": nuggets if (nuggets := nuggets_eaten(transactions)) >= NUGGET_SLIDE_MINIMUM else None,
         "meal_block": _meal_block(meta),
         "flex_paid": round(sum(flex_paid(tx) for tx in transactions), 2),
         "ai": result.get("analysis"),
@@ -789,12 +811,15 @@ def _viewer(share_id: str) -> dict:
     return {"owner": False, "get_own_url": url_for("index", vs=share_id)}
 
 
+# The nugget-count slide shows from this many nuggets (about four 12-counts).
+NUGGET_SLIDE_MINIMUM = 50
+
 # Shareable slides: /wrapped/<id>/<slide> opens the deck at that slide, and its link
 # preview (iMessage, Discord...) is the slide itself once the owner's browser has
 # uploaded its rendering; until then it falls back to the Wrapped's preview card.
 SLIDE_TITLES = {
     "intro": "Semester in food", "spent": "Total spent", "obsession": "#1 obsession",
-    "usual": "Usual order", "personality": "Dining personality", "badges": "Badges",
+    "usual": "Usual order", "nuggets": "Nugget count", "personality": "Dining personality", "badges": "Badges",
     "spots": "Favorite spots", "earliest-latest": "Earliest & latest bite", "caf-swipes": "Caf swipes",
     "tiger-express": "Tiger Express", "streak": "Caf streak", "flex-left": "Flex Bucks",
     "roast": "The roast", "money-talk": "Money talk", "rankings": "Campus rankings",

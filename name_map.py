@@ -116,6 +116,15 @@ CANONICAL: dict[str, str] = {
     # Dr. Jack's
     "matcha tea": "Matcha Latte",
     "fontn hot chocolt": "Hot Chocolate",
+    "grapes and cheese cu": "Grapes & Cheese Cup",
+    "wrap chicken bacon r": "Chicken Bacon Ranch Wrap",
+    # C-Store (Tiger Mart): the register cuts names at 20 characters
+    "ls sour gummies": "Life Savers Sour Gummies",
+    "jollyra sour gummies": "Jolly Rancher Sour Gummies",
+    "ctc cereal bar": "Cinnamon Toast Crunch Cereal Bar",
+    "bloom energy sparkl": "Bloom Sparkling Energy",
+    "bloom energy sparkling": "Bloom Sparkling Energy",
+    "bloom energy": "Bloom Sparkling Energy",
 }
 SPOT_CANONICAL: dict[tuple[str, str], str] = {
     ("CFA", "cookie"): "Chocolate Chunk Cookie",
@@ -127,7 +136,17 @@ DETAIL_ALIASES: dict[str, tuple[str, str]] = {
     "alani": ("Alani Nu", ""),
     "alani - hawaiian": ("Alani Nu", "Hawaiian"),
     "alani nu - hawaiian": ("Alani Nu", "Hawaiian"),
+    "bloom": ("Bloom Sparkling Energy", ""),
+    "grape uncrustable": ("Uncrustable", "Grape"),
+    "honey uncrustable": ("Uncrustable", "Honey"),
+    "naked": ("Naked Juice", ""),
+    "naked - mighty mango": ("Naked Juice", "Mighty Mango"),
+    "naked - blue machine": ("Naked Juice", "Blue Machine"),
+    "naked - green machine": ("Naked Juice", "Green Machine"),
+    "the winter edition": ("Red Bull", "Winter Edition"),
 }
+# Register fragments the cleanup model sometimes leaves in the detail ("Bloom", "Energy Sparkl").
+JUNK_DETAILS = {"energy sparkl", "energy sparkling", "f"}
 # Nuggets keep their count in the name. CFA's 4-count nuggets are always Chick-n-Minis.
 NUGGETS: dict[str, str] = {
     "chick-fil-a nuggets": "Chick-fil-A Nuggets", "nuggets": "Chick-fil-A Nuggets",
@@ -151,7 +170,7 @@ def _join(*parts: str) -> str:
 def canonical_item(name: str, detail: str = "", spot: str | None = None) -> tuple[str, str]:
     """(name, detail) with one name per menu item: a meal or combo counts as its main
     item (detail "Meal"), nugget counts live in the name, and known variants share a name."""
-    name, detail = name.strip(), _join(detail)
+    name, detail = name.strip(), _join(*(p for p in detail.split(",") if p.strip().lower() not in JUNK_DETAILS))
     meal = _MEAL.match(name)
     if meal:
         name, detail = meal.group(1).strip(), _join("Meal", detail)

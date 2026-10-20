@@ -248,7 +248,8 @@ def _users(events) -> None:
     """Every student by name, from invites, runs, saved results and the event log."""
     users = defaultdict(lambda: {"names": Counter(), "first": None, "last": None, "shares": set(),
                                  "invites": 0, "wraps": 0, "failed": 0, "friend_views": 0,
-                                 "shared": 0, "previews": 0, "compares": 0, "latest": None})
+                                 "shared": 0, "previews": 0, "compares": 0, "latest": None,
+                                 "referred_by": None, "brought_in": set()})
 
     def touch(key, ts, name=None):
         u = users[key]
@@ -261,7 +262,8 @@ def _users(events) -> None:
 
     for tag, invite in _invites():
         touch(app._student_key(invite, tag), invite.get("received_at"), invite.get("name"))
-    for sid, meta in _results().items():
+    results = _results()
+    for sid, meta in results.items():
         key = meta.get("student_key")
         if not key or str(key).startswith("test-"):
             continue
@@ -291,16 +293,39 @@ def _users(events) -> None:
         elif name == "compare_view":
             u["compares"] += 1
 
+    # Referrals: a student whose first invite (their signup) reached an inbox whose first
+    # landing came through someone's Wrapped or compare link (?vs=<share_id>).
+    arrived_via = {}
+    for e in events:
+        if e["name"] == "landing_view" and e["share_id"] and e["visitor"]:
+            arrived_via.setdefault(e["visitor"], e["share_id"])
+    signed_up = set()
+    for e in events:
+        if e["name"] != "invite_received" or not e["student"] or e["student"] in signed_up:
+            continue
+        signed_up.add(e["student"])
+        referrer = (results.get(arrived_via.get(e["visitor"])) or {}).get("student_key")
+        if referrer and referrer != e["student"] and referrer in users:
+            users[e["student"]]["referred_by"] = referrer
+            users[referrer]["brought_in"].add(e["student"])
+
+    name_of = lambda key: users[key]["names"].most_common(1)[0][0] if users[key]["names"] else "(no name)"
     print(f"\nUSERS ({len(users)})")
     rows = []
     for key, u in sorted(users.items(), key=lambda kv: kv[1]["first"] or "", reverse=True):
-        name = u["names"].most_common(1)[0][0] if u["names"] else "(no name)"
         link = f"{SITE}/wrapped/{u['latest'][0]}" if u["latest"] else "-"
-        rows.append([name, (u["first"] or "-")[:16].replace("T", " "), (u["last"] or "-")[:16].replace("T", " "),
+        rows.append([name_of(key), (u["first"] or "-")[:16].replace("T", " "), (u["last"] or "-")[:16].replace("T", " "),
                      u["invites"], u["wraps"], u["failed"], u["shared"], u["friend_views"], u["previews"],
-                     u["compares"], link])
+                     u["compares"], name_of(u["referred_by"]) if u["referred_by"] else "-", len(u["brought_in"]),
+                     link])
     _table(["name", "first seen", "last seen", "invites", "wraps", "failed", "shares", "friend views",
-            "previews", "compares", "latest Wrapped"], rows)
+            "previews", "compares", "referred by", "brought in", "latest Wrapped"], rows)
+
+    referrers = sorted((u for u in users.values() if u["brought_in"]), key=lambda u: -len(u["brought_in"]))
+    print(f"\nREFERRALS ({sum(len(u['brought_in']) for u in referrers)} signups through a friend's link)")
+    for u in referrers:
+        print(f"  {u['names'].most_common(1)[0][0]} ({len(u['brought_in'])}): "
+              + ", ".join(sorted(name_of(k) for k in u["brought_in"])))
 
 
 if __name__ == "__main__":

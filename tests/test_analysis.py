@@ -73,6 +73,8 @@ class NormalizeTests(unittest.TestCase):
             ("Chargrill Combo", ""): ("Grilled Chicken Sandwich", "Meal"),
             ("Full Queso Rice Bowl", "Add Chicken"): ("Grilled Chicken & Queso Rice Bowl", "Full, Add Chicken"),
             ("Chips & Queso", "Small"): ("Queso & Chips", "Small"),
+            ("Bloom", "Energy Sparkl"): ("Bloom Sparkling Energy", ""),
+            ("Grape Uncrustable", ""): ("Uncrustable", "Grape"),
         }
         for (name, detail), expected in cases.items():
             self.assertEqual(canonical_item(name, detail, "CFA"), expected, name)

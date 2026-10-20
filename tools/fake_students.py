@@ -195,8 +195,8 @@ def build() -> list[Student]:
     lily.swipe(at(date(YEAR, 10, 2), 17, 48))
     out.append(lily)
 
-    # 9. Single-word name; Early Bird; Chick-fil-A Loyalist; lots of Flex left over.
-    noah = Student("noah", "Noah", "One-word name; Early Bird + CFA Loyalist; big Flex surplus", 512.75, 80, 9)
+    # 9. Single-word name; Breakfast Club; Chick-fil-A Loyalist; lots of Flex left over.
+    noah = Student("noah", "Noah", "One-word name; Breakfast Club + CFA Loyalist; big Flex surplus", 512.75, 80, 9)
     for d in days(noah.rng, 18, range(5)):
         noah.buy(at(d, 7, noah.rng.randint(30, 58)), "biscuit", "tea")
     for d in days(noah.rng, 4):
@@ -259,7 +259,7 @@ def create() -> None:
         except Exception as exc:  # same fallback as a real run
             print(f"  {student.name}: DeepSeek failed ({exc}); saved without AI slides")
         share_id = app._save_result(transactions, swipes, metadata, ai)
-        app._record_run(transactions, swipes, key, YEAR)
+        app._record_run(transactions, swipes, key, metadata)
         cleaned = sum("clean_items" in t for t in transactions)
         manifest[share_id] = {"name": student.name, "scenario": student.scenario, "student_key": key}
         print(f"{student.name} | {student.scenario} | {len(transactions)} purchases ({cleaned} cleaned), "

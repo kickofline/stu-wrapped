@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime, timedelta
 
 from social import (campus_percentiles, campus_wrapped, dining_badges, dining_streaks,
-                    friend_match, signature_order, summary_highlights, tiger_express)
+                    friend_match, nuggets_eaten, signature_order, summary_highlights, tiger_express)
 
 
 class SocialInsightsTests(unittest.TestCase):
@@ -49,15 +49,38 @@ class SocialInsightsTests(unittest.TestCase):
             }
             for day in range(1, 6)
         ]
-        badges = dining_badges(
-            transactions,
-            [{"date": "Oct 1, 2026 12:00PM", "location": "Commons PAX 1"}] * 25,
-            {"startdate": "2026-07-01"},
-        )
-        self.assertEqual(len(badges), 3)
+        swipe = {"date": "Oct 1, 2026 12:00PM", "location": "Commons PAX 1"}
+        meta = {"startdate": "2026-07-01"}
+        badges = dining_badges(transactions, [swipe] * 25, meta)
         self.assertEqual([badge["title"] for badge in badges], [
-            "Matcha Machine", "Caf Regular", "Night Owl",
+            "Matcha Machine", "Night Owl", "Campus Explorer",
+        ])  # 25 swipes is ordinary; a Caf Regular has 80+
+        self.assertEqual([badge["title"] for badge in dining_badges(transactions, [swipe] * 80, meta)][:2],
+                         ["Matcha Machine", "Caf Regular"])
+
+    def test_habit_badges_breakfast_second_dinner_and_energy_flavors(self):
+        breakfast = [{"date": f"Sep {d}, 2026 07:30AM", "location": "Commons PAX 1"} for d in range(1, 21)]
+        breakfast.append({"date": "Sep 1, 2026 08:45AM", "location": "Commons PAX 2"})  # same morning
+        dinner = [{"date": f"Sep {d}, 2026 05:30PM", "location": "Commons PAX 4"} for d in range(14, 20)]
+        after_dinner = [{"date": f"Sep {d}, 2026 06:15PM", "location": "CFA 1", "grand_total": 5.65,
+                         "clean_items": [{"item": "Spicy Chicken Sandwich", "detail": "", "qty": 1, "total": 5.65}]}
+                        for d in range(14, 20)]
+        flavors = ["Cotton Candy", "Cotton Candy, 24 oz", "Cosmic Star", "Hawaiian"]
+        energy = [{"date": f"Sep {d}, 2026 02:00PM", "location": "C-Store", "grand_total": 2.99,
+                   "clean_items": [{"item": "Alani Nu", "detail": flavors[d % 4], "qty": 1, "total": 2.99}]}
+                  for d in range(21, 29)]
+        badges = dining_badges(after_dinner + energy, breakfast + dinner, {"startdate": "2026-07-01"})
+        self.assertEqual([(b["title"], b["description"]) for b in badges], [
+            ("Energy Drink Era", "8 energy drinks across 3 flavors."),
+            ("Second Dinner", "6 food runs right after a Caf meal."),
+            ("Breakfast Club", "20 mornings eating before 10:30 AM."),
         ])
+
+    def test_nuggets_eaten_counts_each_order_and_skips_minis(self):
+        orders = [{"clean_items": [{"item": "Chick-fil-A Nuggets (12 ct)", "detail": "Meal", "qty": 2, "total": 20},
+                                   {"item": "Chick-n-Minis (4 ct)", "detail": "", "qty": 1, "total": 5}]},
+                  {"clean_items": [{"item": "Chick-fil-A Grilled Nuggets (8 ct)", "detail": "", "qty": 1, "total": 6}]}]
+        self.assertEqual(nuggets_eaten(orders), 32)
 
     def test_friend_meals_pair_swipes_within_one_minute_once_each(self):
         noon = datetime(2026, 10, 18, 12, 5)

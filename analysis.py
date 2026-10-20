@@ -220,7 +220,9 @@ Only name a day of the week (including puns like "Taco Tuesday") when avg_visits
 visits that day; per-spot item variety is spots[...].different_items, and an item was only bought
 at the spots in its top_items[...].bought_at (never place it at another spot). If flex_left.ran_out is set,
 their Flex already ran out on that date: say so and never project a future run-out date. If
-paid_other_ways is above 0, only paid_with_flex came from Flex.
+paid_other_ways is above 0, only paid_with_flex came from Flex. Good roast material when the numbers
+stand out: flex_spent_first_week (a fast start), longest_days_without_caf (a Caf break),
+nuggets_eaten, and a large flex_left.projected_left (sitting on Flex they won't spend).
 Answer with JSON only:
 {"personality": {"title": "a 2-4 word dining persona, at most 28 characters, built from their food (top items, spots, times), never from Flex or money", "description": "2-3 sentences"},
  "roast": "2-3 sentences of playful teasing about their habits",

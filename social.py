@@ -1,4 +1,5 @@
 """Deterministic social insights for Wrapped slides and friend comparisons."""
+import re
 from collections import Counter
 from datetime import date, timedelta
 
@@ -151,14 +152,72 @@ def summary_highlights(transactions: list, swipes: list, metadata: dict) -> dict
     }
 
 
+COFFEE_WORDS = ("latte", "macchiato", "mocha", "coffee", "london fog", "frapjack", "americano",
+                "cappuccino", "cold brew", "espresso", "chai")
+ENERGY_WORDS = ("alani", "celsius", "red bull", "bloom", "energy", "monster")
+DESSERT_WORDS = ("cookie", "shake", "brownie", "ice cream", "frosted", "sopapilla", "donut", "cake",
+                 "gummies", "sour patch")
+# A Flex purchase this soon after a Caf swipe is a second meal on top of the Caf one.
+SECOND_DINNER_WINDOW = timedelta(minutes=90)
+_SIZE = re.compile(r"^(?:\d+\s*oz|small|medium|large|meal)$", re.IGNORECASE)
+
+
+def _count_matching(transactions: list, words: tuple, skip: tuple = ()) -> tuple[int, int]:
+    """(how many, how many different kinds) of the items whose name has any of `words` and
+    none of `skip`. Kinds are name plus flavor, ignoring sizes ("Alani Nu, Cotton Candy")."""
+    count, kinds = 0, set()
+    for transaction in transactions:
+        for item in _transaction_items(transaction):
+            name = item["name"].casefold()
+            if any(w in name for w in words) and not any(w in name for w in skip):
+                count += item["qty"]
+                flavor = ", ".join(p.strip() for p in item["detail"].casefold().split(",")
+                                   if p.strip() and not _SIZE.match(p.strip()))
+                kinds.add((name, flavor))
+    return count, len(kinds)
+
+
+def nuggets_eaten(transactions: list) -> int:
+    """Nuggets across every nugget order: the count in the name ("(12 ct)") times quantity.
+    Chick-n-Minis are sandwiches, so they don't count."""
+    total = 0
+    for transaction in transactions:
+        for item in _transaction_items(transaction):
+            counted = re.search(r"Nuggets \((\d+) ct\)", item["name"])
+            if counted:
+                total += int(counted.group(1)) * item["qty"]
+    return total
+
+
+def roast_facts(transactions: list, swipes: list, metadata: dict) -> dict:
+    """Extra numbers for the AI's roast: Flex spent in the first week of buying, the longest
+    break between Caf swipes, and nuggets eaten."""
+    year = date.fromisoformat(metadata["startdate"]).year
+    bought = sorted(((when, t) for t in transactions if (when := parse_when(t.get("date", ""), year))),
+                    key=lambda pair: pair[0])
+    first_week = None
+    if bought:
+        start = bought[0][0].date()
+        first_week = round(sum(flex_paid(t) for when, t in bought if (when.date() - start).days < 7), 2)
+    caf_days = sorted(_event_days(swipes, year))
+    longest_break = max(((b - a).days - 1 for a, b in zip(caf_days, caf_days[1:])), default=None)
+    return {
+        "flex_spent_first_week": first_week,
+        "longest_days_without_caf": longest_break,
+        "nuggets_eaten": nuggets_eaten(transactions),
+    }
+
+
 def dining_badges(transactions: list, swipes: list, metadata: dict) -> list[dict]:
-    """Return the three strongest rule-based badges, in stable order."""
+    """Return the three strongest rule-based badges, in stable order. Thresholds are set
+    from real students so each badge marks out a habit instead of going to everyone."""
     year = date.fromisoformat(metadata["startdate"]).year
     timed = [
         (when, spot_name(transaction.get("location", "")))
         for transaction in transactions
         if (when := parse_when(transaction.get("date", ""), year))
     ]
+    caf_times = sorted(when for swipe in swipes if (when := parse_when(swipe.get("date", ""), year)))
     spots = Counter(spot_name(transaction.get("location", "")) for transaction in transactions)
     quantities = item_quantities(transactions)
     signature = signature_order(transactions)
@@ -170,29 +229,58 @@ def dining_badges(transactions: list, swipes: list, metadata: dict) -> list[dict
             "title": title, "description": description,
         })
 
-    matcha = sum(qty for name, qty in quantities.items() if "matcha" in name.casefold())
+    def qty_with(*words):
+        return sum(qty for name, qty in quantities.items() if any(w in name.casefold() for w in words))
+
+    matcha = qty_with("matcha")
     if matcha >= 3:
         add(90 + matcha, "matcha", "M", "Matcha Machine", f"{matcha} matcha drinks and counting.")
 
-    if len(swipes) >= 20:
-        add(82 + min(len(swipes), 100) / 10, "caf", "C", "Caf Regular", f"{len(swipes)} meal swipes this semester.")
+    coffee, _ = _count_matching(transactions, COFFEE_WORDS, skip=("matcha", "hot chocolate"))
+    if coffee >= 10:
+        add(84 + min(coffee, 20) / 2, "coffee", "JOE", "Caffeine Dependent", f"{coffee} coffee drinks this semester.")
+
+    energy, flavors = _count_matching(transactions, ENERGY_WORDS)
+    if energy >= 8:
+        flavor_note = f" across {flavors} flavors" if flavors >= 3 else ""
+        add(84 + min(energy, 20) / 2, "energy", "NRG", "Energy Drink Era", f"{energy} energy drinks{flavor_note}.")
+
+    if len(swipes) >= 80:
+        add(82 + min(len(swipes), 120) / 15, "caf", "C", "Caf Regular", f"{len(swipes)} meal swipes this semester.")
 
     night = sum(when.hour >= 20 or when.hour < 4 for when, _ in timed)
     if night >= 2:
         add(72 + night, "night", "PM", "Night Owl", f"{night} food runs after 8 PM.")
 
-    morning = sum(when.hour < 10 for when, _ in timed)
-    if morning >= 2:
-        add(68 + morning, "morning", "AM", "Early Bird", f"{morning} stops before 10 AM.")
+    mornings = {when.date() for when in [*caf_times, *(w for w, _ in timed)] if when.hour * 60 + when.minute < 10 * 60 + 30}
+    if len(mornings) >= 20:
+        add(78 + min(len(mornings), 40) / 4, "breakfast", "AM", "Breakfast Club",
+            f"{len(mornings)} mornings eating before 10:30 AM.")
+
+    second = sum(
+        any(timedelta(0) <= when - swipe <= SECOND_DINNER_WINDOW for swipe in caf_times)
+        for when, spot in timed if spot != "Tiger Express"
+    )
+    if second >= 6:
+        add(78 + second, "second-dinner", "2ND", "Second Dinner", f"{second} food runs right after a Caf meal.")
 
     taco_tuesdays = sum(when.weekday() == 1 and spot == "Tacos 4 Life" for when, spot in timed)
     if taco_tuesdays >= 2:
         add(86 + taco_tuesdays, "taco-tuesday", "T4L", "Taco Tuesday", f"{taco_tuesdays} Tuesday trips to Tacos 4 Life.")
 
+    # Spots with their own regular badge once the visits add up, even when not #1.
+    regulars = {"Dr Jacks": (15, "DJ", "Dr. Jack's Regular", "Dr. Jack's"),
+                "Tiger Mart": (10, "TM", "Tiger Mart Regular", "Tiger Mart")}
+    earned = set()
+    for spot, (minimum, mark, title, label) in regulars.items():
+        if spots[spot] >= minimum:
+            earned.add(spot)
+            add(80 + min(spots[spot], 40) / 4, f"regular-{spot}", mark, title, f"{spots[spot]} visits to {label}.")
+
     if spots:
         favorite, visits = spots.most_common(1)[0]
         share = visits / max(1, len(transactions))
-        if visits >= 4 and share >= 0.35:
+        if favorite not in earned and visits >= 4 and share >= 0.35:
             titles = {
                 "CFA": ("CFA", "Chick-fil-A Loyalist"),
                 "Tacos 4 Life": ("T4L", "Taco Loyalist"),
@@ -202,9 +290,28 @@ def dining_badges(transactions: list, swipes: list, metadata: dict) -> list[dict
             add(65 + share * 20, "favorite-spot", mark, title,
                 f"{visits} of your {len(transactions)} visits were here.")
 
-    if signature:
+    if signature and signature["count"] >= 6:
         add(76 + signature["count"], "usual", "x2", "Same Order Energy",
             f"You ordered your usual {signature['count']} times.")
+
+    biggest = max(transactions, key=lambda t: float(t.get("grand_total") or 0), default=None)
+    if biggest and float(biggest.get("grand_total") or 0) >= 25:
+        add(74 + float(biggest["grand_total"]) / 5, "squad", "$$", "Feeding the Squad",
+            f"${float(biggest['grand_total']):.2f} in one order at {spot_name(biggest.get('location', ''))}.")
+
+    fountain = qty_with("fountain drink")
+    if fountain >= 15:
+        add(76 + min(fountain, 30) / 3, "refill", "SIP", "Refill Royalty", f"{fountain} fountain drinks.")
+
+    per_day = Counter(when.date() for when, _ in timed)
+    double_days = sum(1 for visits in per_day.values() if visits >= 2)
+    if double_days >= 15:
+        add(74 + min(double_days, 30) / 3, "double-back", "DBL", "Double Back",
+            f"{double_days} days you came back for more.")
+
+    desserts, _ = _count_matching(transactions, DESSERT_WORDS, skip=("muscle milk",))
+    if desserts >= 6:
+        add(72 + desserts, "sweet-tooth", "YUM", "Sweet Tooth", f"{desserts} desserts and sweets.")
 
     standard_spots = {"CFA", "Dr Jacks", "Tacos 4 Life"}
     if standard_spots.issubset(spots):

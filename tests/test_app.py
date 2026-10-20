@@ -173,6 +173,11 @@ class AppTests(unittest.TestCase):
         self.assertIsNone(app._meal_block({"balances": {"Voluntary Full Meals": 100},
                                            "weekly_meal_plans": ["Voluntary Full Meals"]}))
 
+    def test_campus_flex_pace_needs_three_judged_students(self):
+        two = [{"flex_short": True}, {"flex_short": False}, {"flex_short": None}, {}]
+        self.assertIsNone(app._flex_campus(two))  # students without a Flex plan don't count
+        self.assertEqual(app._flex_campus(two + [{"flex_short": True}]), 67)
+
     def test_tiger_express_purchases_stay_off_the_leaderboard(self):
         buy = lambda where, total, item: {"date": "Sep 2, 2026 12:10PM", "location": where, "amount": -total,
                                           "grand_total": total, "items": [],
