@@ -117,6 +117,15 @@ class AppTests(unittest.TestCase):
         self.assertEqual(invite["visitor"], landing["visitor"])
         self.assertNotIn("abc123", json.dumps(self._events()))  # the tag itself is never stored
 
+    def test_posted_link_source_is_recorded_on_landing(self):
+        client = app.app.test_client()
+        browser = {"User-Agent": "Mozilla/5.0 (iPhone) Safari"}
+        client.get("/?src=YY1", headers=browser)
+        client.get("/?src=<script>", headers=browser)
+        tagged, junk = self._events()
+        self.assertEqual(tagged["props"]["src"], "yy1")
+        self.assertNotIn("src", junk["props"])
+
     def test_browser_events_are_allowlisted(self):
         self._save_result("sharedwrapp1")
         client = app.app.test_client()

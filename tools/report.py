@@ -327,6 +327,29 @@ def _users(events) -> None:
         print(f"  {u['names'].most_common(1)[0][0]} ({len(u['brought_in'])}): "
               + ", ".join(sorted(name_of(k) for k in u["brought_in"])))
 
+    # Posted links (stu.exposed/?src=yy1): visitors who landed through each one, and the
+    # students whose signup (first invite) reached one of those visitors' inboxes.
+    src_of = {}
+    for e in events:
+        if e["name"] == "landing_view" and e["props"].get("src") and e["visitor"]:
+            src_of.setdefault(e["visitor"], e["props"]["src"])
+    sources = defaultdict(lambda: {"visitors": set(), "signups": set()})
+    for visitor, src in src_of.items():
+        sources[src]["visitors"].add(visitor)
+    first_invite = {}
+    for e in events:
+        if e["name"] == "invite_received" and e["student"]:
+            first_invite.setdefault(e["student"], e["visitor"])
+    for student, visitor in first_invite.items():
+        if visitor in src_of:
+            sources[src_of[visitor]]["signups"].add(student)
+    wrapped = {e["student"] for e in events if e["name"] == "wrap_finished"}
+    print(f"\nSOURCES ({len(sources)} tagged links)")
+    _table(["src", "visitors", "signups", "wrapped", "who"],
+           [[src, len(s["visitors"]), len(s["signups"]), len(s["signups"] & wrapped),
+             ", ".join(sorted(name_of(k) for k in s["signups"])) or "-"]
+            for src, s in sorted(sources.items(), key=lambda kv: (-len(kv[1]["signups"]), kv[0]))])
+
 
 if __name__ == "__main__":
     backfill() if "--backfill" in sys.argv else report()

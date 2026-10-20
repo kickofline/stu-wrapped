@@ -49,6 +49,8 @@ INBOX_COOKIE = "inbox"
 MINE_COOKIE = "mine"  # share id of this browser's own latest Wrapped
 VS_COOKIE = "vs"      # share id of the friend whose Wrapped sent this browser here
 _SHARE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{12}$")
+# Campaign tag on posted links (stu.exposed/?src=yy1); tools/report.py counts what each brought in.
+_SRC_RE = re.compile(r"[a-z0-9_-]{1,24}")
 _stats_lock = threading.Lock()
 
 SITE_NAME = "OBU Stu Wrapped"
@@ -573,8 +575,10 @@ def index():
             "wrapped_url": url_for("wrapped", share_id=mine_id) if _result_meta(mine_id) else None,
         }
     if not analytics.is_bot(request.user_agent.string):
+        src = (request.args.get("src") or "").lower()
         analytics.record("landing_view", visitor=analytics.visitor_id(tag), share_id=vs_id if vs else None,
-                         new_visitor=new_visitor, returning=bool(invite), from_friend=bool(vs))
+                         new_visitor=new_visitor, returning=bool(invite), from_friend=bool(vs),
+                         src=src if _SRC_RE.fullmatch(src) else None)
     resp = Response(render_template(
         "index.html", inbox_address=inbox_address(tag), semester_label=_semester_dates()[2],
         vs_name=_first_name(vs) if vs else None, returning=returning,
