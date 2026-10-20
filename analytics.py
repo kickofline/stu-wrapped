@@ -25,6 +25,7 @@ SALT_FILE = os.path.join(DATA_DIR, "analytics_salt")
 CLIENT_EVENTS = {
     "email_copied": set(),
     "flex_link_opened": set(),
+    "open_browser_clicked": set(),
     "slide_reached": {"index", "total", "slide"},
     "share_slide": {"slide", "method"},
     "share_link": {"method"},
@@ -41,6 +42,12 @@ _PREVIEW_APPS = (
     ("twitterbot", "X"), ("discordbot", "Discord"), ("slackbot", "Slack"), ("whatsapp", "WhatsApp"),
     ("telegrambot", "Telegram"), ("snapchat", "Snapchat"), ("linkedinbot", "LinkedIn"),
     ("googlebot", "Google"), ("applebot", "Apple"),
+)
+# In-app browsers (a link tapped inside Instagram, Snapchat...), most specific first.
+_INAPP_APPS = (
+    ("instagram", "Instagram"), ("fban/", "Facebook"), ("fbav/", "Facebook"), ("fb_iab", "Facebook"),
+    ("snapchat", "Snapchat"), ("musical_ly", "TikTok"), ("bytedancewebview", "TikTok"),
+    ("yikyak", "Yik Yak"), ("yik yak", "Yik Yak"),
 )
 
 _lock = threading.Lock()
@@ -101,6 +108,21 @@ def preview_app(user_agent: str | None) -> str:
         if needle in ua:
             return app
     return "browser/other"
+
+
+def inapp_browser(user_agent: str | None) -> str | None:
+    """The app whose built-in browser this is ("Instagram"; "app" for an unnamed iOS or
+    Android web view), or None for a real browser. iOS web views drop Safari's
+    "Safari/" token, which every iOS browser (Chrome, Firefox, Edge) keeps."""
+    ua = (user_agent or "").lower()
+    for needle, app in _INAPP_APPS:
+        if needle in ua:
+            return app
+    if re.search(r"iphone|ipad|ipod", ua) and "applewebkit" in ua and "safari/" not in ua:
+        return "app"
+    if "android" in ua and "; wv)" in ua:
+        return "app"
+    return None
 
 
 def record(event: str, *, visitor: str | None = None, student: str | None = None,

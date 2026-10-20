@@ -41,6 +41,13 @@
       </form>
     </div>
     {% else %}
+    {% if open_browser %}
+    <div class="inapp">
+      <p><b>You're in {{ open_browser.where }}.</b> The OBU Microsoft sign-in in step 2 works better in {{ open_browser.browser }}.</p>
+      <a class="pill pill-light" href="{{ open_browser.href }}" onclick="track('open_browser_clicked')">Open in {{ open_browser.browser }} ↗</a>
+      <p class="inapp-note">Nothing happens? Tap ••• or ⋮ and choose Open in browser.</p>
+    </div>
+    {% endif %}
     <form method="POST" action="{{ url_for('start') }}">
       <ol class="steps">
         <li class="setup-step">

@@ -139,6 +139,15 @@ button { font: inherit; }
 .landing.came-back .when-back { display: inline; }
 .landing.came-back .show-steps { display: block; margin-top: 1rem; }
 
+/* In-app browser (Instagram, Yik Yak...): offer the real browser before step 2's sign-in. */
+.inapp { margin-top: clamp(.9rem, 3dvh, 1.8rem); background: rgba(0,0,0,.2); border-radius: 18px; padding: .9rem 1rem; display: flex; flex-direction: column; align-items: flex-start; gap: .6rem; }
+.inapp p { font-weight: 600; line-height: 1.35; }
+.inapp b { color: var(--accent); }
+.inapp .pill { padding: .6rem 1.2rem; font-size: .95rem; }
+.inapp-note { color: var(--muted); font-size: .85rem; }
+
+.landing.came-back .inapp { display: none; }
+
 .campus-back { margin-bottom: 2.4rem; padding: .65rem 1.1rem; font-size: .95rem; }
 
 /* ── Waiting ───────────────────────────────────────────────── */

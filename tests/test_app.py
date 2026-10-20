@@ -1,3 +1,4 @@
+import html
 import json
 import os
 import tempfile
@@ -227,6 +228,40 @@ class AppTests(unittest.TestCase):
         self.assertIn('href="/">← Back to Stu Wrapped', client.get("/campus?from=nosuchshare1&at=rankings").get_data(as_text=True))
         self.assertIn('href="/wrapped/backshare123"', client.get("/campus?from=backshare123&at=evil").get_data(as_text=True))
         self.assertIn("const START_SLIDE = null", client.get("/wrapped/backshare123?at=evil").get_data(as_text=True))
+
+    def test_open_in_safari_hands_the_inbox_over_once(self):
+        instagram = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 "
+                                   "(KHTML, like Gecko) Mobile/15E148 Instagram 350.0.0"}
+        in_app = app.app.test_client()
+        in_app.set_cookie(app.INBOX_COOKIE, "inst01")
+        page = html.unescape(in_app.get("/", headers=instagram).get_data(as_text=True))
+        self.assertIn("You're in Instagram's browser.", page)
+        token = page.split('href="x-safari-https://localhost/h/', 1)[1].split('"', 1)[0]
+        self.assertEqual(self._events()[-1]["props"]["inapp"], "Instagram")
+
+        safari = app.app.test_client()
+        safari.set_cookie(app.INBOX_COOKIE, "safar1")
+        self.assertEqual(safari.get(f"/h/{token}").status_code, 302)
+        self.assertEqual(safari.get_cookie(app.INBOX_COOKIE).value, "inst01")
+        self.assertEqual(self._events()[-1]["name"], "browser_handoff")
+        safari.set_cookie(app.INBOX_COOKIE, "safar1")
+        safari.get(f"/h/{token}")  # single use
+        self.assertEqual(safari.get_cookie(app.INBOX_COOKIE).value, "safar1")
+
+        # A browser that already has its own saved Flex login keeps it.
+        token = in_app.get("/", headers=instagram).get_data(as_text=True).split("/h/", 1)[1].split('"', 1)[0]
+        mailbox.save_credentials("safar1", {"username": "u", "password": "p", "name": "Pat Doe"})
+        safari.get(f"/h/{token}")
+        self.assertEqual(safari.get_cookie(app.INBOX_COOKIE).value, "safar1")
+
+        android = {"User-Agent": "Mozilla/5.0 (Linux; Android 14; Pixel 8 Build/AP2A; wv) AppleWebKit/537.36 "
+                                 "(KHTML, like Gecko) Version/4.0 Chrome/129.0 Mobile Safari/537.36"}
+        page = html.unescape(in_app.get("/", headers=android).get_data(as_text=True))
+        self.assertIn('href="intent://localhost/h/', page)
+        self.assertIn("You're in an in-app browser.", page)
+        real_safari = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 "
+                                     "(KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"}
+        self.assertNotIn("/h/", in_app.get("/", headers=real_safari).get_data(as_text=True))
 
 
 if __name__ == "__main__":

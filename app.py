@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import threading
+import time
 import traceback
 from collections import defaultdict
 from datetime import date, datetime, timedelta
@@ -69,7 +70,7 @@ def _site_meta():
 
 
 # Pages that show one visitor's inbox address, Wrapped or status: never cache them.
-_PRIVATE_PREFIXES = ("/wrapped/", "/results/", "/compare/", "/status/", "/wait/", "/api/")
+_PRIVATE_PREFIXES = ("/wrapped/", "/results/", "/compare/", "/status/", "/wait/", "/api/", "/h/")
 
 
 @app.after_request
@@ -559,6 +560,51 @@ def _summary(transactions: list, swipes: list, metadata: dict, label: str) -> di
     }
 
 
+# ── Open in Safari ───────────────────────────────────────────────────────────
+
+# An in-app browser (Instagram, Snapchat...) hands its inbox to the real browser through
+# a one-time link, so a guest email already added in Flex Bucks still finds it.
+HANDOFF_TTL = 15 * 60
+_handoffs: dict[str, tuple[str, str, float]] = {}  # token -> (inbox tag, app, expiry)
+_handoffs_lock = threading.Lock()
+
+
+def _open_browser(tag: str, app_name: str, user_agent: str) -> dict | None:
+    ua = user_agent.lower()
+    ios, android = bool(re.search(r"iphone|ipad|ipod", ua)), "android" in ua
+    if not (ios or android):
+        return None
+    now = time.time()
+    with _handoffs_lock:
+        for stale in [t for t, entry in _handoffs.items() if entry[2] < now]:
+            del _handoffs[stale]
+        token = secrets.token_urlsafe(12)
+        _handoffs[token] = (tag, app_name, now + HANDOFF_TTL)
+    url = url_for("handoff", token=token, _external=True, _scheme="https")
+    href = ("x-safari-" + url if ios else
+            "intent://" + url.removeprefix("https://") + "#Intent;scheme=https;end")
+    return {"href": href, "browser": "Safari" if ios else "your browser",
+            "where": "an in-app browser" if app_name == "app" else f"{app_name}'s browser"}
+
+
+@app.get("/h/<token>")
+def handoff(token):
+    """The one-time "Open in Safari" link: adopt the in-app browser's inbox (once, within
+    15 minutes), unless this browser already has a saved Flex login of its own."""
+    with _handoffs_lock:
+        entry = _handoffs.pop(token, None)
+    resp = redirect(url_for("index"))
+    if not entry or entry[2] < time.time():
+        return resp
+    tag, app_name, _ = entry
+    current = request.cookies.get(INBOX_COOKIE)
+    if is_tag(current) and current != tag and load_credentials(current):
+        return resp
+    _set_cookie(resp, INBOX_COOKIE, tag)
+    analytics.record("browser_handoff", visitor=analytics.visitor_id(tag), from_app=app_name)
+    return resp
+
+
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 @app.get("/")
@@ -579,14 +625,17 @@ def index():
             "has_run": student_key in _load_stats().get("students", {}),
             "wrapped_url": url_for("wrapped", share_id=mine_id) if _result_meta(mine_id) else None,
         }
-    if not analytics.is_bot(request.user_agent.string):
+    user_agent = request.user_agent.string
+    inapp = None if invite else analytics.inapp_browser(user_agent)  # setup page only
+    if not analytics.is_bot(user_agent):
         src = (request.args.get("src") or "").lower()
         analytics.record("landing_view", visitor=analytics.visitor_id(tag), share_id=vs_id if vs else None,
                          new_visitor=new_visitor, returning=bool(invite), from_friend=bool(vs),
-                         src=src if _SRC_RE.fullmatch(src) else None)
+                         src=src if _SRC_RE.fullmatch(src) else None, inapp=inapp)
     resp = Response(render_template(
         "index.html", inbox_address=inbox_address(tag), semester_label=_semester_dates()[2],
         vs_name=_first_name(vs) if vs else None, returning=returning,
+        open_browser=_open_browser(tag, inapp, user_agent) if inapp else None,
     ))
     _set_cookie(resp, INBOX_COOKIE, tag)
     if vs:
