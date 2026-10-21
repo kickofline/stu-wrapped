@@ -42,6 +42,28 @@ class ScraperTests(unittest.TestCase):
                  {"account": "Resident Flex", "html": MEAL_STATEMENT}]
         self.assertEqual(weekly_meal_plans(pages), ["Voluntary Full Meals"])
 
+    def test_student_identity_uses_full_atrium_id_and_derives_obu_email(self):
+        html = """
+        <aside aria-label="Customer Information">
+          <h2>Customer Information</h2><b>Drew Dettmer</b>
+          <div><span>Account</span><b>85124</b></div>
+        </aside>
+        <div>Account Number: XX124</div>
+        """
+        pages = [{"account": "Resident Flex", "html": html},
+                 {"account": "Resident Meals", "html": html}]
+        self.assertEqual(scraper.student_identity(pages, "Drew Dettmer"),
+                         {"student_id": "85124", "email": "det85124@obu.edu"})
+        self.assertEqual(scraper.obu_email("Pat O'Neal Jr.", "12345"), "one12345@obu.edu")
+
+    def test_student_identity_rejects_disagreeing_statement_pages(self):
+        page = lambda student_id: {
+            "html": (f'<aside aria-label="Customer Information">'
+                     f'<span>Account</span><b>{student_id}</b></aside>')
+        }
+        with self.assertRaises(ValueError):
+            scraper.student_identity([page("12345"), page("54321")], "Pat Doe")
+
     def test_page_loads_retry_atrium_server_errors_but_the_login_post_does_not(self):
         hits = {"GET": 0, "POST": 0}
 

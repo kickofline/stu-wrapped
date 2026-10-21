@@ -1,9 +1,10 @@
-"""Usage analytics: an append-only event log in data/analytics.db (SQLite).
+"""Usage analytics and the canonical student identity database.
 
 No third-party scripts and no IP addresses. A visitor is a salted hash of the browser's
 inbox cookie, so one browser's landing, signup, run and shares line up without storing
-the tag itself. Signup and run events carry the student's name; tools/report.py reads
-the log (plus saved results, archive and invites) and prints the report.
+the tag itself. ``events.student`` is the five-digit Atrium customer account ID; the
+``students`` table stores that ID, the derived OBU email and the current display name.
+tools/report.py combines this database with saved results, archives and invites.
 
 Recording never raises: a broken analytics write must not break a page.
 """
@@ -58,12 +59,19 @@ CREATE TABLE IF NOT EXISTS events (
     ts TEXT NOT NULL,          -- local time, ISO seconds
     name TEXT NOT NULL,
     visitor TEXT,              -- salted hash of the inbox cookie
-    student TEXT,              -- student_key (same as results/stats)
+    student TEXT,              -- five-digit Atrium customer account ID
     share_id TEXT,
     props TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS events_name_ts ON events (name, ts);
 CREATE INDEX IF NOT EXISTS events_student ON events (student);
+CREATE TABLE IF NOT EXISTS students (
+    student_id TEXT PRIMARY KEY
+        CHECK (length(student_id) = 5 AND student_id NOT GLOB '*[^0-9]*'),
+    email TEXT NOT NULL UNIQUE,
+    name TEXT,
+    updated_at TEXT NOT NULL
+);
 """
 
 
@@ -96,6 +104,47 @@ def visitor_id(tag: str | None) -> str | None:
     if not tag:
         return None
     return hashlib.sha256(f"{_get_salt()}:{tag}".encode()).hexdigest()[:16]
+
+
+def save_student(student_id: str, email: str, name: str | None) -> None:
+    """Insert or refresh one verified Atrium identity.
+
+    Unlike event recording, this is required application state: callers see database
+    errors instead of silently producing a Wrapped with no canonical identity.
+    """
+    if not re.fullmatch(r"\d{5}", student_id):
+        raise ValueError("invalid Atrium student ID")
+    if not re.fullmatch(r"[a-z]{3}\d{5}@obu\.edu", email):
+        raise ValueError("invalid OBU email")
+    con = connect()
+    try:
+        with con:
+            con.execute(
+                """INSERT INTO students (student_id, email, name, updated_at)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(student_id) DO UPDATE SET
+                     email = excluded.email,
+                     name = excluded.name,
+                     updated_at = excluded.updated_at""",
+                (student_id, email, name, datetime.now().isoformat(timespec="seconds")),
+            )
+    finally:
+        con.close()
+
+
+def identify_visitor(visitor: str | None, student_id: str) -> None:
+    """Attach pre-scrape events from this browser to its newly verified student ID."""
+    if not visitor:
+        return
+    con = connect()
+    try:
+        with con:
+            con.execute(
+                "UPDATE events SET student = ? WHERE visitor = ? AND student IS NULL",
+                (student_id, visitor),
+            )
+    finally:
+        con.close()
 
 
 def is_bot(user_agent: str | None) -> bool:

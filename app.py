@@ -1,4 +1,3 @@
-import hashlib
 import hmac
 import json
 import os
@@ -31,7 +30,8 @@ from mailbox import (delete_credentials, inbox_address, is_atrium_invite, is_tag
                      load_credentials, new_tag, parse_invite, save_credentials,
                      tag_from_recipient)
 from name_map import expand_name
-from scraper import LoginFailed, LoginLimited, NoAccounts, fetch_activity, weekly_meal_plans
+from scraper import (LoginFailed, LoginLimited, NoAccounts, fetch_activity,
+                     student_identity, weekly_meal_plans)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)  # signs flash messages only
@@ -151,9 +151,9 @@ def _aggregate_items(transactions: list) -> list[dict]:
 
 
 def _read_stats() -> dict:
-    """Campus-wide comparison stats: {"students": {student_key: latest run summary}}.
-    Keyed per student so re-running replaces that student's numbers instead of
-    counting them again."""
+    """Campus-wide comparison stats: ``{"students": {student_id: latest run summary}}``.
+    Keyed by the raw five-digit Atrium ID, so re-running replaces that student's
+    numbers instead of counting them again."""
     try:
         with open(STATS_FILE, encoding="utf-8") as f:
             stats = json.load(f)
@@ -185,11 +185,10 @@ def _save_stats(stats: dict) -> None:
     os.replace(STATS_FILE + ".tmp", STATS_FILE)
 
 
-def _student_key(invite: dict, tag: str) -> str:
-    """Stable, non-identifying key for one student: the account holder's name from
-    the invite (same across browsers and re-invites), else the inbox tag."""
-    name = " ".join((invite.get("name") or "").lower().split())
-    return hashlib.sha256((name or f"inbox:{tag}").encode()).hexdigest()[:16]
+def _student_id(record: dict | None) -> str | None:
+    """The verified five-digit Atrium customer account ID, when already known."""
+    value = str((record or {}).get("student_id") or "")
+    return value if re.fullmatch(r"\d{5}", value) else None
 
 
 def _result_meta(share_id: str | None) -> dict | None:
@@ -203,13 +202,10 @@ def _result_meta(share_id: str | None) -> dict | None:
         return None
 
 
-def _same_student(a: dict, b: dict) -> bool:
-    """Same student behind two runs: student keys when both have one, otherwise the
-    normalized names (runs saved before keys were stored)."""
-    if a.get("student_key") and b.get("student_key"):
-        return a["student_key"] == b["student_key"]
-    name_a = " ".join((a.get("name") or "").casefold().split())
-    return bool(name_a) and name_a == " ".join((b.get("name") or "").casefold().split())
+def _same_student(a: dict | None, b: dict | None) -> bool:
+    """Whether two records carry the same verified Atrium customer account ID."""
+    a_id, b_id = _student_id(a), _student_id(b)
+    return bool(a_id) and a_id == b_id
 
 
 def _first_name(meta: dict) -> str:
@@ -285,7 +281,7 @@ def _flex_short(transactions: list, meta: dict, swipes: list) -> bool | None:
     return None if plan is None else bool(plan.get("runs_out") or plan.get("ran_out"))
 
 
-def _record_run(transactions: list, swipes: list, student_key: str, metadata: dict) -> None:
+def _record_run(transactions: list, swipes: list, student_id: str, metadata: dict) -> None:
     """Store this student's latest run in the campus-wide comparison stats."""
     summary = _student_summary(transactions, swipes)
     summary.update(campus_activity(_leaderboard_purchases(transactions), swipes,
@@ -295,7 +291,7 @@ def _record_run(transactions: list, swipes: list, student_key: str, metadata: di
     with _stats_lock:
         _record_raw_items(transactions)
         stats = _read_stats()
-        stats["students"][student_key] = summary
+        stats["students"][student_id] = summary
         _save_stats(stats)
 
 
@@ -428,7 +424,7 @@ def _run_job(job_id: str, tag: str, invite: dict) -> None:
     except Exception:
         _log(f"[job {job_id}] failed:\n{traceback.format_exc()}")
         analytics.record("wrap_failed", visitor=analytics.visitor_id(tag),
-                         student=_student_key(invite, tag), reason="crash")
+                         student=_student_id(invite), reason="crash")
         fail(job_id, "Something broke while wrapping your semester. Tap Start over to try again.")
     finally:
         _SCRAPE_SLOTS.release()
@@ -436,7 +432,7 @@ def _run_job(job_id: str, tag: str, invite: dict) -> None:
 
 def _wrap(job_id: str, tag: str, invite: dict) -> None:
     startdate, enddate, label = _semester_dates()
-    student = _student_key(invite, tag)
+    student = _student_id(invite)
 
     def failed(reason: str, message: str) -> None:
         analytics.record("wrap_failed", visitor=analytics.visitor_id(tag), student=student,
@@ -448,6 +444,12 @@ def _wrap(job_id: str, tag: str, invite: dict) -> None:
             invite["username"], invite["password"], startdate, enddate,
             progress=lambda step, msg: update_progress(job_id, step, msg),
         )
+        identity = student_identity(pages, invite.get("name"))
+        student = identity["student_id"]
+        analytics.save_student(student, identity["email"], invite.get("name"))
+        invite = {**invite, **identity}
+        save_credentials(tag, invite)
+        analytics.identify_visitor(analytics.visitor_id(tag), student)
     except LoginFailed:
         delete_credentials(tag)
         failed("login_failed", "Flex Bucks didn't accept the login from your invite. "
@@ -468,7 +470,8 @@ def _wrap(job_id: str, tag: str, invite: dict) -> None:
         return
 
     _log(f"[job {job_id}] fetched {len(transactions)} purchases, {len(swipes)} meal swipes")
-    _archive_run(job_id, tag, student, invite, transactions, swipes, balances, pages)
+    _archive_run(job_id, tag, student, identity["email"], invite,
+                 transactions, swipes, balances, pages)
     if not transactions and not swipes:
         failed("no_activity", f"We didn't find any Flex Bucks purchases or meal swipes for {label}. "
                               "If you're not on a meal plan, there's nothing to wrap yet!")
@@ -478,9 +481,10 @@ def _wrap(job_id: str, tag: str, invite: dict) -> None:
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "startdate": startdate, "enddate": enddate,
         "name": invite.get("name"),
+        "student_id": student,
+        "email": identity["email"],
         "balances": balances,
         "weekly_meal_plans": weekly_meal_plans(pages),
-        "student_key": student,
         "run_id": job_id,
     }
     ai = None
@@ -500,7 +504,7 @@ def _wrap(job_id: str, tag: str, invite: dict) -> None:
     finish(job_id, share_id)
 
 
-def _archive_run(job_id, tag, student, invite, transactions, swipes, balances, pages) -> None:
+def _archive_run(job_id, tag, student_id, email, invite, transactions, swipes, balances, pages) -> None:
     """Keep everything every scrape returned, forever, for later analytics: the raw
     statement HTML per account plus what we parsed from it. One file per run, never
     rewritten, so re-runs and re-parses can be compared over time. No passwords."""
@@ -508,7 +512,8 @@ def _archive_run(job_id, tag, student, invite, transactions, swipes, balances, p
     stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
     with open(os.path.join(ARCHIVE_DIR, f"{stamp}-{job_id}.json"), "w", encoding="utf-8") as f:
         json.dump({
-            "run_id": job_id, "archived_at": stamp, "inbox": tag, "student_key": student,
+            "run_id": job_id, "archived_at": stamp, "inbox": tag,
+            "student_id": student_id, "email": email,
             "name": invite.get("name"), "guest_login": invite.get("username"),
             "balances": balances, "purchases": transactions, "swipes": swipes, "pages": pages,
         }, f)
@@ -619,10 +624,10 @@ def index():
     returning = None
     if invite:
         mine_id = request.cookies.get(MINE_COOKIE)
-        student_key = _student_key(invite, tag)
+        student_id = _student_id(invite)
         returning = {
             "first_name": _first_name(invite) if invite.get("name") else "",
-            "has_run": student_key in _load_stats().get("students", {}),
+            "has_run": bool(student_id) and student_id in _load_stats().get("students", {}),
             "wrapped_url": url_for("wrapped", share_id=mine_id) if _result_meta(mine_id) else None,
         }
     user_agent = request.user_agent.string
@@ -686,7 +691,7 @@ def start():
         return redirect(url_for("index"))
     invite = load_credentials(tag)
     analytics.record("wrap_started", visitor=analytics.visitor_id(tag),
-                     student=_student_key(invite, tag) if invite else None, waiting_for_invite=not invite)
+                     student=_student_id(invite), waiting_for_invite=not invite)
     if invite and claim(job_id):
         _start_job(job_id, tag, invite)
     return redirect(url_for("wait", job_id=job_id))
@@ -749,7 +754,7 @@ def api_inbound():
 
     save_credentials(tag, invite)
     analytics.record("invite_received", visitor=analytics.visitor_id(tag),
-                     student=_student_key(invite, tag), name=invite.get("name"))
+                     student=None, name=invite.get("name"))
     _notify_signup(invite.get("name"))
     woken = claim_waiting(tag)
     for job_id in woken:
@@ -763,7 +768,7 @@ def results(share_id):
     result = _load_result(share_id)
     meta = result["metadata"]
     analytics.record("items_view", visitor=analytics.visitor_id(request.cookies.get(INBOX_COOKIE)),
-                     student=meta.get("student_key"), share_id=share_id)
+                     student=meta.get("student_id"), share_id=share_id)
     items = _aggregate_items(result["transactions"])
     start, end = date.fromisoformat(meta["startdate"]), date.fromisoformat(meta["enddate"])
     return render_template(
@@ -798,11 +803,11 @@ def _wrapped_context(share_id: str) -> dict:
     current["caf_streak"] = campus_activity(_leaderboard_purchases(transactions), result.get("swipes", []),
                                             start.year)["caf_streak"]
     stored = _load_stats()["students"]
-    student_key = meta.get("student_key")
+    student_id = meta.get("student_id")
     students = []
     replaced = False
     for key, summary in stored.items():
-        if student_key and key == student_key:
+        if student_id and key == student_id:
             students.append(current)
             replaced = True
         else:
@@ -818,7 +823,7 @@ def _wrapped_context(share_id: str) -> dict:
     name = meta.get("name") or ""
     return {
         "share_id": share_id,
-        "student_key": meta.get("student_key"),
+        "student_id": meta.get("student_id"),
         "student_name": name,
         "first_name": name.split()[0] if name else "",
         "semester_label": semester_label,
@@ -849,15 +854,15 @@ def _wrapped_context(share_id: str) -> dict:
 
 
 def _viewer(share_id: str) -> dict:
-    """Whether the person viewing a Wrapped made it, and the comparison its outro offers."""
+    """Whether this browser owns a Wrapped, and the comparison its outro offers.
+
+    Student IDs correlate runs and prevent self-comparisons; they are not an
+    authorization credential. Ownership remains a separate browser capability.
+    """
     meta = _result_meta(share_id) or {}
-    tag = request.cookies.get(INBOX_COOKIE)
-    invite = load_credentials(tag) if is_tag(tag) else None
     mine_id = request.cookies.get(MINE_COOKIE)
     mine = _result_meta(mine_id)
-    owner = (mine_id == share_id
-             or (mine is not None and _same_student(mine, meta))
-             or (invite is not None and meta.get("student_key") == _student_key(invite, tag)))
+    owner = mine_id == share_id
     if owner:
         vs_id = request.cookies.get(VS_COOKIE)
         vs = _result_meta(vs_id)
@@ -911,7 +916,7 @@ def _render_wrapped(share_id: str, slide: str | None = None, start: str | None =
     viewer = _viewer(share_id)
     if not analytics.is_bot(request.user_agent.string):
         analytics.record("wrapped_view", visitor=analytics.visitor_id(request.cookies.get(INBOX_COOKIE)),
-                         student=ctx.get("student_key"), share_id=share_id, owner=viewer["owner"], slide=slide)
+                         student=ctx.get("student_id"), share_id=share_id, owner=viewer["owner"], slide=slide)
     share_url = url_for("wrapped", share_id=share_id, _external=True, _scheme="https")
     og = {"url": share_url, "label": None, "width": 1200, "height": 630,
           "image": url_for("og_result", share_id=share_id, _external=True, _scheme="https")}
@@ -1037,8 +1042,8 @@ def compare_results(left_id, right_id):
     match = friend_match(left, right)
     if not analytics.is_bot(request.user_agent.string):
         analytics.record("compare_view", visitor=analytics.visitor_id(request.cookies.get(INBOX_COOKIE)),
-                         student=(_result_meta(left_id) or {}).get("student_key"), share_id=left_id,
-                         other=right_id, other_student=(_result_meta(right_id) or {}).get("student_key"))
+                         student=(_result_meta(left_id) or {}).get("student_id"), share_id=left_id,
+                         other=right_id, other_student=(_result_meta(right_id) or {}).get("student_id"))
     share_url = url_for(
         "compare_results", left_id=left_id, right_id=right_id,
         _external=True, _scheme="https",
@@ -1052,7 +1057,7 @@ def compare_results(left_id, right_id):
 @app.get("/og/<share_id>.png")
 def og_result(share_id):
     ctx = _wrapped_context(share_id)
-    analytics.record("link_preview", student=ctx.get("student_key"), share_id=share_id,
+    analytics.record("link_preview", student=ctx.get("student_id"), share_id=share_id,
                      app=analytics.preview_app(request.user_agent.string))
     path = os.path.join(OG_DIR, f"{share_id}.png")
     if not os.path.exists(path):
@@ -1076,7 +1081,7 @@ def og_slide(share_id, slide):
     if not os.path.exists(path):
         return og_result(share_id)
     meta = _result_meta(share_id) or {}
-    analytics.record("link_preview", student=meta.get("student_key"), share_id=share_id, slide=slide,
+    analytics.record("link_preview", student=meta.get("student_id"), share_id=share_id, slide=slide,
                      app=analytics.preview_app(request.user_agent.string))
     return send_file(path, mimetype="image/png", max_age=3600)
 
@@ -1142,7 +1147,7 @@ def api_results(share_id):
 def download_csv(share_id):
     result = _load_result(share_id)
     analytics.record("csv_download", visitor=analytics.visitor_id(request.cookies.get(INBOX_COOKIE)),
-                     student=result["metadata"].get("student_key"), share_id=share_id)
+                     student=result["metadata"].get("student_id"), share_id=share_id)
     items = _aggregate_items(result["transactions"])
     lines = ["rank,item,qty,total_spend"]
     for item in items:
@@ -1180,7 +1185,7 @@ def api_event():
     share_id = data.get("share_id")
     meta = _result_meta(share_id) if isinstance(share_id, str) else None
     analytics.record(name, visitor=analytics.visitor_id(request.cookies.get(INBOX_COOKIE)),
-                     student=meta.get("student_key") if meta else None,
+                     student=meta.get("student_id") if meta else None,
                      share_id=share_id if meta else None, **props)
     return "", 204
 

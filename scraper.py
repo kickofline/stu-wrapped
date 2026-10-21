@@ -11,6 +11,7 @@ allowance"), so each run logs out when it is done.
 """
 import re
 import time
+import unicodedata
 from urllib.parse import urlencode, urljoin
 
 import requests
@@ -134,6 +135,46 @@ def list_accounts(session: requests.Session, skey: str) -> list[tuple[str, str]]
     if not picker:
         return []
     return [(o["value"], o.get_text(strip=True)) for o in picker.find_all("option") if o.get("value")]
+
+
+_NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv"}
+
+
+def obu_email(name: str, student_id: str) -> str:
+    """Derive the institutional email: first three last-name letters + Atrium ID."""
+    if not re.fullmatch(r"\d{5}", student_id):
+        raise ValueError("invalid Atrium student ID")
+    parts = name.split()
+    while parts and re.sub(r"[^a-z]", "", parts[-1].casefold()) in _NAME_SUFFIXES:
+        parts.pop()
+    if not parts:
+        raise ValueError("Atrium statement has no student name")
+    folded = unicodedata.normalize("NFKD", parts[-1]).encode("ascii", "ignore").decode()
+    prefix = re.sub(r"[^a-z]", "", folded.casefold())[:3]
+    if len(prefix) != 3:
+        raise ValueError("student last name has fewer than three letters")
+    return f"{prefix}{student_id}@obu.edu"
+
+
+def student_identity(pages: list[dict], name: str | None) -> dict[str, str]:
+    """The canonical ID/email exposed in every Atrium statement page.
+
+    Every page must agree. The masked ``Account Number: XX###`` is deliberately
+    ignored because it collides across students.
+    """
+    ids = set()
+    for page in pages:
+        soup = BeautifulSoup(page.get("html") or "", "lxml")
+        info = soup.find("aside", attrs={"aria-label": "Customer Information"})
+        if not info:
+            continue
+        match = re.search(r"\bAccount\s+(\d{5})\b", info.get_text(" ", strip=True))
+        if match:
+            ids.add(match.group(1))
+    if len(ids) != 1:
+        raise ValueError(f"Atrium statements exposed {len(ids)} distinct student IDs")
+    student_id = ids.pop()
+    return {"student_id": student_id, "email": obu_email(name or "", student_id)}
 
 
 def fetch_activity(username, password, startdate, enddate, progress=lambda step, msg: None):

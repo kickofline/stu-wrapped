@@ -76,7 +76,7 @@ def backfill() -> None:
         if (invite.get("received_at") or "9999") >= live_since:
             continue
         analytics.record("invite_received", ts=invite.get("received_at"), visitor=analytics.visitor_id(tag),
-                         student=app._student_key(invite, tag), name=invite.get("name"), backfill=True)
+                         student=app._student_id(invite), name=invite.get("name"), backfill=True)
         added["invite_received"] += 1
 
     seen_runs = set()
@@ -86,7 +86,7 @@ def backfill() -> None:
         if ts >= live_since:
             continue
         visitor = analytics.visitor_id(run.get("inbox"))
-        common = {"ts": ts, "visitor": visitor, "student": run.get("student_key"), "name": run.get("name"),
+        common = {"ts": ts, "visitor": visitor, "student": run.get("student_id"), "name": run.get("name"),
                   "backfill": True}
         analytics.record("wrap_started", **common)
         if not run.get("purchases") and not run.get("swipes"):
@@ -99,10 +99,10 @@ def backfill() -> None:
         added["wrap_finished"] += 1
 
     for sid, meta in results.items():  # runs saved before the archive existed
-        if (meta.get("run_id") in seen_runs or str(meta.get("student_key", "")).startswith("test-")
+        if (meta.get("run_id") in seen_runs or str(meta.get("student_id", "")).startswith("test-")
                 or (meta.get("generated_at") or "9999") >= live_since):
             continue
-        analytics.record("wrap_finished", ts=meta.get("generated_at"), student=meta.get("student_key"),
+        analytics.record("wrap_finished", ts=meta.get("generated_at"), student=meta.get("student_id"),
                          share_id=sid, name=meta.get("name"), backfill=True)
         added["wrap_finished (results only)"] += 1
     print("backfilled:", dict(added))
@@ -261,10 +261,12 @@ def _users(events) -> None:
         return u
 
     for tag, invite in _invites():
-        touch(app._student_key(invite, tag), invite.get("received_at"), invite.get("name"))
+        key = app._student_id(invite)
+        if key:
+            touch(key, invite.get("received_at"), invite.get("name"))
     results = _results()
     for sid, meta in results.items():
-        key = meta.get("student_key")
+        key = meta.get("student_id")
         if not key or str(key).startswith("test-"):
             continue
         u = touch(key, meta.get("generated_at"), meta.get("name"))
@@ -304,7 +306,7 @@ def _users(events) -> None:
         if e["name"] != "invite_received" or not e["student"] or e["student"] in signed_up:
             continue
         signed_up.add(e["student"])
-        referrer = (results.get(arrived_via.get(e["visitor"])) or {}).get("student_key")
+        referrer = (results.get(arrived_via.get(e["visitor"])) or {}).get("student_id")
         if referrer and referrer != e["student"] and referrer in users:
             users[e["student"]]["referred_by"] = referrer
             users[referrer]["brought_in"].add(e["student"])

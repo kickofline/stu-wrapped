@@ -94,8 +94,10 @@ def _cred_path(tag: str) -> str:
 def save_credentials(tag: str, invite: dict) -> None:
     os.makedirs(CREDENTIALS_DIR, exist_ok=True)
     path = _cred_path(tag)
+    saved = {**invite, "received_at": invite.get("received_at")
+             or datetime.now().isoformat(timespec="seconds")}
     with open(path + ".tmp", "w", encoding="utf-8") as f:
-        json.dump({**invite, "received_at": datetime.now().isoformat(timespec="seconds")}, f)
+        json.dump(saved, f)
     os.replace(path + ".tmp", path)
 
 

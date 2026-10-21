@@ -7,7 +7,7 @@ stats, so the fakes show up on the Campus Leaderboard and in everyone's rankings
     python tools/fake_students.py           # (re)create; prints share links
     python tools/fake_students.py --remove  # delete every fake result and stats entry
 
-Fakes are listed in data/test_students.json and use "test-" student keys.
+Fakes are listed in data/test_students.json and use reserved ``test-`` student IDs.
 """
 import json
 import os
@@ -251,7 +251,7 @@ def create() -> None:
         metadata = {"generated_at": datetime.now().isoformat(timespec="seconds"),
                     "startdate": startdate, "enddate": enddate, "name": student.name,
                     "balances": balances, "weekly_meal_plans": ["Resident Meals"],
-                    "student_key": key, "run_id": f"test-{student.slug}"}
+                    "student_id": key, "run_id": f"test-{student.slug}"}
         ai = None
         try:
             analysis.normalize(transactions)
@@ -261,7 +261,7 @@ def create() -> None:
         share_id = app._save_result(transactions, swipes, metadata, ai)
         app._record_run(transactions, swipes, key, metadata)
         cleaned = sum("clean_items" in t for t in transactions)
-        manifest[share_id] = {"name": student.name, "scenario": student.scenario, "student_key": key}
+        manifest[share_id] = {"name": student.name, "scenario": student.scenario, "student_id": key}
         print(f"{student.name} | {student.scenario} | {len(transactions)} purchases ({cleaned} cleaned), "
               f"{len(swipes)} swipes | AI: {(ai or {}).get('personality', {}).get('title', 'none')} | "
               f"{SITE}/wrapped/{share_id}", flush=True)

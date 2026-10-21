@@ -13,10 +13,11 @@ import mailbox
 class AppTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.original = (app.RESULTS_DIR, mailbox.CREDENTIALS_DIR, app.new_tag, app.OG_DIR,
-                         app.STATS_FILE, app._stats_cache,
+        self.original = (app.RESULTS_DIR, app.ARCHIVE_DIR, mailbox.CREDENTIALS_DIR,
+                         app.new_tag, app.OG_DIR, app.STATS_FILE, app._stats_cache,
                          analytics.DB_FILE, analytics.SALT_FILE, analytics._salt)
         app.OG_DIR = os.path.join(self.tmp.name, "og")
+        app.ARCHIVE_DIR = os.path.join(self.tmp.name, "archive")
         app.RESULTS_DIR = self.tmp.name
         app.STATS_FILE = os.path.join(self.tmp.name, "stats.json")
         app._stats_cache = {"mtime": object(), "stats": {}}
@@ -28,8 +29,8 @@ class AppTests(unittest.TestCase):
         jobs.JOBS.clear()
 
     def tearDown(self):
-        (app.RESULTS_DIR, mailbox.CREDENTIALS_DIR, app.new_tag, app.OG_DIR,
-         app.STATS_FILE, app._stats_cache,
+        (app.RESULTS_DIR, app.ARCHIVE_DIR, mailbox.CREDENTIALS_DIR,
+         app.new_tag, app.OG_DIR, app.STATS_FILE, app._stats_cache,
          analytics.DB_FILE, analytics.SALT_FILE, analytics._salt) = self.original
         self.tmp.cleanup()
 
@@ -41,8 +42,8 @@ class AppTests(unittest.TestCase):
             con.close()
         return [{**dict(r), "props": json.loads(r["props"])} for r in rows]
 
-    def _save_result(self, share_id, name="Pat Doe", key="k" * 16):
-        result = {"metadata": {"name": name, "student_key": key,
+    def _save_result(self, share_id, name="Pat Doe", student_id="12345"):
+        result = {"metadata": {"name": name, "student_id": student_id,
                                "startdate": "2026-07-01", "enddate": "2026-10-19"},
                   "transactions": [], "swipes": []}
         with open(os.path.join(self.tmp.name, f"{share_id}.json"), "w", encoding="utf-8") as f:
@@ -76,7 +77,8 @@ class AppTests(unittest.TestCase):
 
     def test_saved_login_without_a_prior_run_gets_the_first_run_action(self):
         tag = "abc123"
-        invite = {"username": "guest@example.com", "password": "p", "name": "Pat Doe"}
+        invite = {"username": "guest@example.com", "password": "p", "name": "Pat Doe",
+                  "student_id": "12345", "email": "doe12345@obu.edu"}
         mailbox.save_credentials(tag, invite)
         client = app.app.test_client()
         client.set_cookie(app.INBOX_COOKIE, tag)
@@ -85,11 +87,55 @@ class AppTests(unittest.TestCase):
         self.assertIn('data-action="initial-generate"', first_visit)
         self.assertNotIn('data-action="refresh-wrap"', first_visit)
 
-        student_key = app._student_key(invite, tag)
-        app._save_stats({"students": {student_key: {"name": "Pat Doe"}}})
+        app._save_stats({"students": {"12345": {"name": "Pat Doe"}}})
         later_visit = client.get("/").get_data(as_text=True)
         self.assertIn('data-action="refresh-wrap"', later_visit)
         self.assertNotIn('data-action="initial-generate"', later_visit)
+
+    def test_same_name_is_not_identity_and_student_rows_use_the_raw_id(self):
+        self.assertFalse(app._same_student({"name": "Pat Doe", "student_id": "12345"},
+                                           {"name": "Pat Doe", "student_id": "54321"}))
+        self.assertTrue(app._same_student({"name": "Pat Doe", "student_id": "12345"},
+                                          {"name": "Different Name", "student_id": "12345"}))
+        analytics.save_student("12345", "doe12345@obu.edu", "Pat Doe")
+        con = analytics.connect()
+        try:
+            row = con.execute("SELECT student_id, email, name FROM students").fetchone()
+        finally:
+            con.close()
+        self.assertEqual(tuple(row), ("12345", "doe12345@obu.edu", "Pat Doe"))
+
+    def test_wrap_persists_and_uses_the_atrium_id_end_to_end(self):
+        tag = "abc123"
+        job_id = jobs.job_for(tag)
+        jobs.claim(job_id)
+        invite = {"username": "guest@example.com", "password": "p", "name": "Drew Dettmer"}
+        html_page = {
+            "account": "Resident Meals", "acct": "2",
+            "html": ('<aside aria-label="Customer Information"><span>Account</span>'
+                     '<b>85124</b></aside>'),
+        }
+        swipes = [{"date": "Oct 19, 2026 08:21AM", "location": "Commons PAX 4"}]
+        old_fetch, old_enabled = app.fetch_activity, app.analysis.enabled
+        app.fetch_activity = lambda *_args, **_kwargs: ([], swipes, {"Resident Meals": 98}, [html_page])
+        app.analysis.enabled = lambda: False
+        try:
+            app._wrap(job_id, tag, invite)
+        finally:
+            app.fetch_activity, app.analysis.enabled = old_fetch, old_enabled
+
+        saved_job = jobs.get_job(job_id)
+        self.assertEqual(saved_job["status"], "done")
+        result = app._load_result(saved_job["share_id"])
+        self.assertEqual(result["metadata"]["student_id"], "85124")
+        self.assertEqual(result["metadata"]["email"], "det85124@obu.edu")
+        self.assertEqual(mailbox.load_credentials(tag)["student_id"], "85124")
+        self.assertIn("85124", app._load_stats()["students"])
+        archive_path = os.path.join(app.ARCHIVE_DIR, os.listdir(app.ARCHIVE_DIR)[0])
+        with open(archive_path, encoding="utf-8") as f:
+            archive = json.load(f)
+        self.assertEqual((archive["student_id"], archive["email"]),
+                         ("85124", "det85124@obu.edu"))
 
     def test_page_visits_extend_saved_cookies_to_the_400_day_cap(self):
         client = app.app.test_client()
@@ -137,14 +183,18 @@ class AppTests(unittest.TestCase):
                                "method": "share", "extra": "ignored"}).status_code, 204)
         self.assertEqual(send({"name": "share_link", "share_id": "nosuchshare1", "method": "copy"}).status_code, 204)
         slide, link = self._events()
-        self.assertEqual((slide["student"], slide["share_id"]), ("k" * 16, "sharedwrapp1"))
+        self.assertEqual((slide["student"], slide["share_id"]), ("12345", "sharedwrapp1"))
         self.assertEqual(slide["props"], {"slide": "roast", "method": "share"})
         self.assertIsNone(link["share_id"])
 
-    def test_raw_receipts_are_only_served_to_the_owner(self):
+    def test_raw_receipts_are_only_served_to_the_owner_capability(self):
         share_id = "abcdefghijkl"
         self._save_result(share_id)
         client = app.app.test_client()
+        self.assertEqual(client.get(f"/api/results/{share_id}").status_code, 404)
+        mailbox.save_credentials("abc123", {"name": "Pat Doe", "student_id": "12345",
+                                            "email": "doe12345@obu.edu"})
+        client.set_cookie(app.INBOX_COOKIE, "abc123")
         self.assertEqual(client.get(f"/api/results/{share_id}").status_code, 404)
         client.set_cookie(app.MINE_COOKIE, share_id)
         self.assertEqual(client.get(f"/api/results/{share_id}").status_code, 200)
