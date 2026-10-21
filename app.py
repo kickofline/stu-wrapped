@@ -1,3 +1,4 @@
+import hashlib
 import hmac
 import json
 import os
@@ -7,6 +8,7 @@ import threading
 import time
 import traceback
 from collections import defaultdict
+from contextlib import closing
 from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
 
@@ -20,12 +22,13 @@ load_dotenv()
 import analysis
 import analytics
 import og_image
+import state
 from insights import NOT_SPOTS, flex_paid, parse_when, spot_name, time_insights
 from social import (campus_activity, campus_medals, campus_percentiles, campus_wrapped, dining_badges,
                     dining_streaks, friend_match, nuggets_eaten, roast_facts, signature_order,
                     summary_highlights, tiger_express, treat_counts)
 from jobs import (claim, claim_waiting, cleanup_old_jobs, fail, finish, get_job,
-                  job_for, update_progress)
+                  job_for, running_jobs, update_progress)
 from mailbox import (delete_credentials, inbox_address, is_atrium_invite, is_tag,
                      load_credentials, new_tag, parse_invite, save_credentials,
                      tag_from_recipient)
@@ -47,8 +50,12 @@ OG_DIR         = os.path.join(DATA_DIR, "og")  # rendered link-preview images, o
 ARCHIVE_DIR    = os.path.join(DATA_DIR, "archive")  # every scrape, raw + parsed, kept forever
 
 INBOX_COOKIE = "inbox"
-MINE_COOKIE = "mine"  # share id of this browser's own latest Wrapped
+MINE_COOKIE = "mine"  # share id of this browser's own latest Wrapped (navigation only, never proof)
 VS_COOKIE = "vs"      # share id of the friend whose Wrapped sent this browser here
+# Random 128-bit capability per browser. Results store its sha256 in owner_hashes; it,
+# or the inbox cookie of the run (owner_visitor), is what proves ownership of a Wrapped.
+OWNER_COOKIE = "owner"
+_OWNER_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{22}$")
 _SHARE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{12}$")
 # Campaign tag on posted links (stu.exposed/?src=yy1); tools/report.py counts what each brought in.
 _SRC_RE = re.compile(r"[a-z0-9_-]{1,24}")
@@ -92,7 +99,7 @@ def _refresh_cookies(resp: Response) -> None:
     if resp.mimetype != "text/html":
         return
     already_set = {header.split("=", 1)[0] for header in resp.headers.getlist("Set-Cookie")}
-    for name in (INBOX_COOKIE, MINE_COOKIE):
+    for name in (INBOX_COOKIE, MINE_COOKIE, OWNER_COOKIE):
         value = request.cookies.get(name)
         if value and name not in already_set:
             _set_cookie(resp, name, value)
@@ -220,6 +227,30 @@ COOKIE_MAX_AGE = 400 * 24 * 3600
 def _set_cookie(resp: Response, name: str, value: str, max_age: int = COOKIE_MAX_AGE) -> None:
     resp.set_cookie(name, value, max_age=max_age, httponly=True, samesite="Lax",
                     secure=request.is_secure or request.headers.get("X-Forwarded-Proto") == "https")
+
+
+def _owner_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _browser_owner_token() -> str | None:
+    token = request.cookies.get(OWNER_COOKIE)
+    return token if token and _OWNER_TOKEN_RE.fullmatch(token) else None
+
+
+def _is_owner(meta: dict | None) -> bool:
+    """Whether this browser made the Wrapped: it holds the owner token the run was started
+    with, or the inbox cookie whose Flex login produced it (which can already start new
+    runs of that student's data). Public share ids, names and student ids never count."""
+    if not meta:
+        return False
+    token = _browser_owner_token()
+    if token and _owner_hash(token) in (meta.get("owner_hashes") or []):
+        return True
+    tag = request.cookies.get(INBOX_COOKIE)
+    owner_visitor = meta.get("owner_visitor")
+    return bool(is_tag(tag) and owner_visitor
+                and hmac.compare_digest(analytics.visitor_id(tag), owner_visitor))
 
 
 def _new_inbox_tag() -> str:
@@ -430,6 +461,19 @@ def _run_job(job_id: str, tag: str, invite: dict) -> None:
         _SCRAPE_SLOTS.release()
 
 
+def recover_jobs() -> None:
+    """Restart runs the previous process left "running" (a deploy or crash stopped their
+    thread). Called once per Gunicorn worker at boot (gunicorn.conf.py)."""
+    for job in running_jobs():
+        invite = load_credentials(job["tag"])
+        if not invite:
+            fail(job["job_id"], "Your saved Flex Bucks login is gone. Tap Start over.")
+            continue
+        update_progress(job["job_id"], 1, "Picking your Wrapped back up…")
+        _log(f"[job {job['job_id']}] restarting after a restart of the app")
+        _start_job(job["job_id"], job["tag"], invite)
+
+
 def _wrap(job_id: str, tag: str, invite: dict) -> None:
     startdate, enddate, label = _semester_dates()
     student = _student_id(invite)
@@ -477,6 +521,7 @@ def _wrap(job_id: str, tag: str, invite: dict) -> None:
                               "If you're not on a meal plan, there's nothing to wrap yet!")
         return
 
+    job = get_job(job_id) or {}
     metadata = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "startdate": startdate, "enddate": enddate,
@@ -486,6 +531,8 @@ def _wrap(job_id: str, tag: str, invite: dict) -> None:
         "balances": balances,
         "weekly_meal_plans": weekly_meal_plans(pages),
         "run_id": job_id,
+        "owner_hashes": [job["owner_hash"]] if job.get("owner_hash") else [],
+        "owner_visitor": analytics.visitor_id(tag),
     }
     ai = None
     if analysis.enabled():
@@ -568,10 +615,9 @@ def _summary(transactions: list, swipes: list, metadata: dict, label: str) -> di
 # ── Open in Safari ───────────────────────────────────────────────────────────
 
 # An in-app browser (Instagram, Snapchat...) hands its inbox to the real browser through
-# a one-time link, so a guest email already added in Flex Bucks still finds it.
+# a one-time link, so a guest email already added in Flex Bucks still finds it. Tokens
+# live in data/state.db so a deploy between the tap and the open doesn't break them.
 HANDOFF_TTL = 15 * 60
-_handoffs: dict[str, tuple[str, str, float]] = {}  # token -> (inbox tag, app, expiry)
-_handoffs_lock = threading.Lock()
 
 
 def _open_browser(tag: str, app_name: str, user_agent: str) -> dict | None:
@@ -580,11 +626,11 @@ def _open_browser(tag: str, app_name: str, user_agent: str) -> dict | None:
     if not (ios or android):
         return None
     now = time.time()
-    with _handoffs_lock:
-        for stale in [t for t, entry in _handoffs.items() if entry[2] < now]:
-            del _handoffs[stale]
-        token = secrets.token_urlsafe(12)
-        _handoffs[token] = (tag, app_name, now + HANDOFF_TTL)
+    token = secrets.token_urlsafe(12)
+    with closing(state.connect()) as con:
+        con.execute("DELETE FROM handoffs WHERE expires < ?", (now,))
+        con.execute("INSERT INTO handoffs (token, tag, app, expires) VALUES (?, ?, ?, ?)",
+                    (token, tag, app_name, now + HANDOFF_TTL))
     url = url_for("handoff", token=token, _external=True, _scheme="https")
     href = ("x-safari-" + url if ios else
             "intent://" + url.removeprefix("https://") + "#Intent;scheme=https;end")
@@ -596,18 +642,27 @@ def _open_browser(tag: str, app_name: str, user_agent: str) -> dict | None:
 def handoff(token):
     """The one-time "Open in Safari" link: adopt the in-app browser's inbox (once, within
     15 minutes), unless this browser already has a saved Flex login of its own."""
-    with _handoffs_lock:
-        entry = _handoffs.pop(token, None)
+    with closing(state.connect()) as con:
+        entry = con.execute("DELETE FROM handoffs WHERE token = ? RETURNING tag, app, expires",
+                            (token,)).fetchone()
     resp = redirect(url_for("index"))
-    if not entry or entry[2] < time.time():
+    if not entry or entry["expires"] < time.time():
         return resp
-    tag, app_name, _ = entry
+    tag, app_name = entry["tag"], entry["app"]
     current = request.cookies.get(INBOX_COOKIE)
     if is_tag(current) and current != tag and load_credentials(current):
         return resp
     _set_cookie(resp, INBOX_COOKIE, tag)
     analytics.record("browser_handoff", visitor=analytics.visitor_id(tag), from_app=app_name)
     return resp
+
+
+@app.get("/healthz")
+def healthz():
+    """Deploy health check: the process serves requests and its state store opens."""
+    with closing(state.connect()) as con:
+        con.execute("SELECT 1").fetchone()
+    return jsonify({"ok": True})
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -657,6 +712,7 @@ def switch_account():
     resp = redirect(url_for("index"))
     _set_cookie(resp, INBOX_COOKIE, _new_inbox_tag())
     resp.delete_cookie(MINE_COOKIE)
+    resp.delete_cookie(OWNER_COOKIE)  # the next student on this phone must not own this one's Wrapped
     return resp
 
 
@@ -685,7 +741,8 @@ def start():
         flash("Your browser didn't keep our cookie. Enable cookies and try again.", "error")
         return redirect(url_for("index"))
 
-    job_id = job_for(tag)
+    token = _browser_owner_token() or secrets.token_urlsafe(16)
+    job_id = job_for(tag, _owner_hash(token))
     if job_id is None:
         flash("We're swamped right now. Try again in a minute.", "error")
         return redirect(url_for("index"))
@@ -694,7 +751,9 @@ def start():
                      student=_student_id(invite), waiting_for_invite=not invite)
     if invite and claim(job_id):
         _start_job(job_id, tag, invite)
-    return redirect(url_for("wait", job_id=job_id))
+    resp = redirect(url_for("wait", job_id=job_id))
+    _set_cookie(resp, OWNER_COOKIE, token)
+    return resp
 
 
 @app.get("/wait/<job_id>")
@@ -767,6 +826,8 @@ def api_inbound():
 def results(share_id):
     result = _load_result(share_id)
     meta = result["metadata"]
+    if not _is_owner(meta):
+        abort(404)
     analytics.record("items_view", visitor=analytics.visitor_id(request.cookies.get(INBOX_COOKIE)),
                      student=meta.get("student_id"), share_id=share_id)
     items = _aggregate_items(result["transactions"])
@@ -862,7 +923,7 @@ def _viewer(share_id: str) -> dict:
     meta = _result_meta(share_id) or {}
     mine_id = request.cookies.get(MINE_COOKIE)
     mine = _result_meta(mine_id)
-    owner = mine_id == share_id
+    owner = _is_owner(meta)
     if owner:
         vs_id = request.cookies.get(VS_COOKIE)
         vs = _result_meta(vs_id)
@@ -870,7 +931,7 @@ def _viewer(share_id: str) -> dict:
             return {"owner": True}
         return {"owner": True, "versus_name": _first_name(vs),
                 "versus_url": url_for("compare_results", left_id=share_id, right_id=vs_id)}
-    if mine is not None:
+    if mine is not None and mine_id != share_id:
         return {"owner": False, "versus_url": url_for("compare_results", left_id=mine_id, right_id=share_id)}
     return {"owner": False, "get_own_url": url_for("index", vs=share_id)}
 
@@ -962,7 +1023,7 @@ def wrapped_slide(share_id, slide):
 @app.post("/api/slide-image/<share_id>/<slide>")
 def upload_slide_image(share_id, slide):
     """The owner's browser uploads each slide's 1080-wide rendering for link previews."""
-    if slide not in SLIDE_TITLES or _result_meta(share_id) is None or not _viewer(share_id)["owner"]:
+    if slide not in SLIDE_TITLES or not _is_owner(_result_meta(share_id)):
         return "", 404
     if (request.content_length or 0) > SLIDE_IMAGE_MAX_BYTES:
         return "", 413
@@ -1138,7 +1199,7 @@ def server_error(_error):
 def api_results(share_id):
     """Raw receipts: only for the student who made this Wrapped."""
     result = _load_result(share_id)
-    if not _viewer(share_id)["owner"]:
+    if not _is_owner(result["metadata"]):
         abort(404)
     return jsonify(result)
 
@@ -1146,6 +1207,8 @@ def api_results(share_id):
 @app.get("/download/<share_id>/csv")
 def download_csv(share_id):
     result = _load_result(share_id)
+    if not _is_owner(result["metadata"]):
+        abort(404)
     analytics.record("csv_download", visitor=analytics.visitor_id(request.cookies.get(INBOX_COOKIE)),
                      student=result["metadata"].get("student_id"), share_id=share_id)
     items = _aggregate_items(result["transactions"])

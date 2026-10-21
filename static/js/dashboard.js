@@ -50,7 +50,8 @@ function buildTable(data) {
   tbody.innerHTML = '';
   data.forEach(item => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${item.rank}</td><td>${escHtml(item.name)}</td><td>${item.qty}</td>`;
+    tr.innerHTML = `<td>${item.rank}</td><td>${escHtml(item.name)}</td><td>${item.qty}</td>` +
+      `<td>$${item.total_spend.toFixed(2)}</td>`;
     tbody.appendChild(tr);
   });
 }

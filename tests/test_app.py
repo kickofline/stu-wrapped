@@ -8,6 +8,7 @@ import analytics
 import app
 import jobs
 import mailbox
+import state
 
 
 class AppTests(unittest.TestCase):
@@ -15,7 +16,7 @@ class AppTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.original = (app.RESULTS_DIR, app.ARCHIVE_DIR, mailbox.CREDENTIALS_DIR,
                          app.new_tag, app.OG_DIR, app.STATS_FILE, app._stats_cache,
-                         analytics.DB_FILE, analytics.SALT_FILE, analytics._salt)
+                         analytics.DB_FILE, analytics.SALT_FILE, analytics._salt, state.DB_FILE)
         app.OG_DIR = os.path.join(self.tmp.name, "og")
         app.ARCHIVE_DIR = os.path.join(self.tmp.name, "archive")
         app.RESULTS_DIR = self.tmp.name
@@ -25,13 +26,13 @@ class AppTests(unittest.TestCase):
         analytics.DB_FILE = os.path.join(self.tmp.name, "analytics.db")
         analytics.SALT_FILE = os.path.join(self.tmp.name, "analytics_salt")
         analytics._salt = None
+        state.DB_FILE = os.path.join(self.tmp.name, "state.db")
         app.app.config["TESTING"] = True
-        jobs.JOBS.clear()
 
     def tearDown(self):
         (app.RESULTS_DIR, app.ARCHIVE_DIR, mailbox.CREDENTIALS_DIR,
          app.new_tag, app.OG_DIR, app.STATS_FILE, app._stats_cache,
-         analytics.DB_FILE, analytics.SALT_FILE, analytics._salt) = self.original
+         analytics.DB_FILE, analytics.SALT_FILE, analytics._salt, state.DB_FILE) = self.original
         self.tmp.cleanup()
 
     def _events(self):
@@ -42,9 +43,11 @@ class AppTests(unittest.TestCase):
             con.close()
         return [{**dict(r), "props": json.loads(r["props"])} for r in rows]
 
-    def _save_result(self, share_id, name="Pat Doe", student_id="12345"):
+    def _save_result(self, share_id, name="Pat Doe", student_id="12345", owner_token=None, owner_inbox=None):
         result = {"metadata": {"name": name, "student_id": student_id,
-                               "startdate": "2026-07-01", "enddate": "2026-10-19"},
+                               "startdate": "2026-07-01", "enddate": "2026-10-19",
+                               "owner_hashes": [app._owner_hash(owner_token)] if owner_token else [],
+                               "owner_visitor": analytics.visitor_id(owner_inbox) if owner_inbox else None},
                   "transactions": [], "swipes": []}
         with open(os.path.join(self.tmp.name, f"{share_id}.json"), "w", encoding="utf-8") as f:
             json.dump(result, f)
@@ -107,7 +110,7 @@ class AppTests(unittest.TestCase):
 
     def test_wrap_persists_and_uses_the_atrium_id_end_to_end(self):
         tag = "abc123"
-        job_id = jobs.job_for(tag)
+        job_id = jobs.job_for(tag, app._owner_hash("T" * 22))
         jobs.claim(job_id)
         invite = {"username": "guest@example.com", "password": "p", "name": "Drew Dettmer"}
         html_page = {
@@ -136,6 +139,9 @@ class AppTests(unittest.TestCase):
             archive = json.load(f)
         self.assertEqual((archive["student_id"], archive["email"]),
                          ("85124", "det85124@obu.edu"))
+        owner = app.app.test_client()
+        owner.set_cookie(app.OWNER_COOKIE, "T" * 22)
+        self.assertEqual(owner.get(f"/api/results/{saved_job['share_id']}").status_code, 200)
 
     def test_page_visits_extend_saved_cookies_to_the_400_day_cap(self):
         client = app.app.test_client()
@@ -187,17 +193,59 @@ class AppTests(unittest.TestCase):
         self.assertEqual(slide["props"], {"slide": "roast", "method": "share"})
         self.assertIsNone(link["share_id"])
 
-    def test_raw_receipts_are_only_served_to_the_owner_capability(self):
+    def test_private_routes_need_the_owner_token_or_the_runs_inbox_not_the_share_id(self):
+        token = "T" * 22
         share_id = "abcdefghijkl"
-        self._save_result(share_id)
-        client = app.app.test_client()
-        self.assertEqual(client.get(f"/api/results/{share_id}").status_code, 404)
-        mailbox.save_credentials("abc123", {"name": "Pat Doe", "student_id": "12345",
-                                            "email": "doe12345@obu.edu"})
-        client.set_cookie(app.INBOX_COOKIE, "abc123")
-        self.assertEqual(client.get(f"/api/results/{share_id}").status_code, 404)
-        client.set_cookie(app.MINE_COOKIE, share_id)
-        self.assertEqual(client.get(f"/api/results/{share_id}").status_code, 200)
+        self._save_result(share_id, owner_token=token, owner_inbox="abc123")
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\x0dIHDR" + (1080).to_bytes(4, "big") + (1920).to_bytes(4, "big")
+        private = [lambda c: c.get(f"/api/results/{share_id}"), lambda c: c.get(f"/results/{share_id}"),
+                   lambda c: c.get(f"/download/{share_id}/csv"),
+                   lambda c: c.post(f"/api/slide-image/{share_id}/roast", data=png, content_type="image/png")]
+
+        forger = app.app.test_client()
+        forger.set_cookie(app.MINE_COOKIE, share_id)  # the public share id is not proof
+        forger.set_cookie(app.OWNER_COOKIE, "U" * 22)
+        forger.set_cookie(app.INBOX_COOKIE, "zzz999")
+        self.assertEqual([call(forger).status_code for call in private], [404] * 4)
+
+        by_token, by_inbox = app.app.test_client(), app.app.test_client()
+        by_token.set_cookie(app.OWNER_COOKIE, token)
+        by_inbox.set_cookie(app.INBOX_COOKIE, "abc123")
+        self.assertEqual([call(by_token).status_code for call in private], [200, 200, 200, 204])
+        self.assertEqual([call(by_inbox).status_code for call in private], [200, 200, 200, 204])
+
+    def test_start_gives_the_browser_an_owner_token_that_its_finished_wrapped_honors(self):
+        mailbox.save_credentials("abc123", {"username": "guest@example.com", "password": "p",
+                                            "name": "Drew Dettmer"})
+        started = []
+        original = app._start_job
+        app._start_job = lambda *args: started.append(args)
+        try:
+            client = app.app.test_client()
+            client.set_cookie(app.INBOX_COOKIE, "abc123")
+            client.post("/start")
+        finally:
+            app._start_job = original
+        token = client.get_cookie(app.OWNER_COOKIE).value
+        self.assertRegex(token, r"^[A-Za-z0-9_-]{22}$")
+        job = jobs.get_job(started[0][0])
+        self.assertEqual(job["owner_hash"], app._owner_hash(token))
+
+    def test_running_jobs_restart_after_the_app_restarts(self):
+        mailbox.save_credentials("abc123", {"username": "u", "password": "p", "name": "Pat Doe"})
+        resumable, orphaned, waiting = jobs.job_for("abc123"), jobs.job_for("gone01"), jobs.job_for("wait01")
+        jobs.claim(resumable)
+        jobs.claim(orphaned)  # its saved login was deleted meanwhile
+        started = []
+        original = app._start_job
+        app._start_job = lambda *args: started.append(args)
+        try:
+            app.recover_jobs()
+        finally:
+            app._start_job = original
+        self.assertEqual([(job_id, tag) for job_id, tag, _ in started], [(resumable, "abc123")])
+        self.assertEqual(jobs.get_job(orphaned)["status"], "error")
+        self.assertEqual(jobs.get_job(waiting)["status"], "waiting")
 
     def test_unexpected_error_after_login_fails_the_job_instead_of_hanging(self):
         tag = "b" * 16
@@ -249,12 +297,12 @@ class AppTests(unittest.TestCase):
         self.assertNotIn("Tiger Express", summary["spots"])
 
     def test_slide_links_preview_the_owners_uploaded_slide(self):
-        self._save_result("slideshare12")
+        self._save_result("slideshare12", owner_token="T" * 22)
         png = b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\x0dIHDR" + (1080).to_bytes(4, "big") + (1920).to_bytes(4, "big") + b"rest"
         upload = lambda client, body=png: client.post("/api/slide-image/slideshare12/roast", data=body,
                                                       content_type="image/png")
         friend, owner = app.app.test_client(), app.app.test_client()
-        owner.set_cookie(app.MINE_COOKIE, "slideshare12")
+        owner.set_cookie(app.OWNER_COOKIE, "T" * 22)
         self.assertEqual(upload(friend).status_code, 404)
         self.assertEqual(upload(owner, b"not a png" * 4).status_code, 400)
         before = friend.get("/wrapped/slideshare12/roast").get_data(as_text=True)

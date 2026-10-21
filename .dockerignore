@@ -9,3 +9,5 @@ scraper.log
 data/
 .venv/
 .wrangler/
+local/
+marketing/
