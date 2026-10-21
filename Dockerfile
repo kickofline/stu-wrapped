@@ -7,6 +7,11 @@ COPY --from=uv /uv /usr/local/bin/uv
 
 WORKDIR /app
 
+# curl: Coolify's deploy health check runs `curl http://localhost:8000/healthz` inside the
+# container and rolls back to the old container when it fails.
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 # The app runs as an unprivileged user. Its persistent volume (/app/data) must be owned
 # by this uid: chown -R 10001:10001 the volume once when moving from a root image.
 RUN groupadd --system --gid 10001 app \
@@ -27,7 +32,7 @@ ENV PORT=8000
 EXPOSE 8000
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=3 \
-    CMD [".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4)"]
+    CMD ["curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8000/healthz"]
 
 # Settings (one worker, eight threads, job recovery at boot) live in gunicorn.conf.py
 CMD [".venv/bin/gunicorn", "app:app"]
