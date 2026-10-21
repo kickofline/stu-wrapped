@@ -620,7 +620,18 @@ def _summary(transactions: list, swipes: list, metadata: dict, label: str) -> di
 HANDOFF_TTL = 15 * 60
 
 
-def _open_browser(tag: str, app_name: str, user_agent: str) -> dict | None:
+def _safari_view_guess(src: str | None, user_agent: str) -> str | None:
+    """Yik Yak opens links in iOS's Safari view, whose user agent is Safari's own, so
+    inapp_browser() can't see it; but that view keeps its own cookies, so the inbox it
+    shows isn't the one Safari has. Links posted on Yik Yak carry ?src=yy…; an
+    iPhone landing through one gets the handoff offer, phrased as a question."""
+    ua = user_agent.lower()
+    real_safari_ua = (re.search(r"iphone|ipad|ipod", ua) and "safari/" in ua
+                      and not re.search(r"crios|fxios|edgios|opios", ua))
+    return "Yik Yak" if src and src.startswith("yy") and real_safari_ua else None
+
+
+def _open_browser(tag: str, app_name: str, user_agent: str, guessed: bool = False) -> dict | None:
     ua = user_agent.lower()
     ios, android = bool(re.search(r"iphone|ipad|ipod", ua)), "android" in ua
     if not (ios or android):
@@ -634,8 +645,9 @@ def _open_browser(tag: str, app_name: str, user_agent: str) -> dict | None:
     url = url_for("handoff", token=token, _external=True, _scheme="https")
     href = ("x-safari-" + url if ios else
             "intent://" + url.removeprefix("https://") + "#Intent;scheme=https;end")
-    return {"href": href, "browser": "Safari" if ios else "your browser",
-            "where": "an in-app browser" if app_name == "app" else f"{app_name}'s browser"}
+    where = "an in-app browser" if app_name == "app" else f"{app_name}'s browser"
+    return {"href": href, "browser": "Safari" if ios else "your browser", "guessed": guessed,
+            "lead": f"Opened this in {app_name}?" if guessed else f"You're in {where}."}
 
 
 @app.get("/h/<token>")
@@ -687,15 +699,19 @@ def index():
         }
     user_agent = request.user_agent.string
     inapp = None if invite else analytics.inapp_browser(user_agent)  # setup page only
+    src = (request.args.get("src") or "").lower()
+    src = src if _SRC_RE.fullmatch(src) else None
+    guessed_app = None if invite or inapp else _safari_view_guess(src, user_agent)
     if not analytics.is_bot(user_agent):
-        src = (request.args.get("src") or "").lower()
         analytics.record("landing_view", visitor=analytics.visitor_id(tag), share_id=vs_id if vs else None,
                          new_visitor=new_visitor, returning=bool(invite), from_friend=bool(vs),
-                         src=src if _SRC_RE.fullmatch(src) else None, inapp=inapp)
+                         src=src, inapp=inapp, safari_view_guess=guessed_app)
+    open_browser = (_open_browser(tag, inapp, user_agent) if inapp else
+                    _open_browser(tag, guessed_app, user_agent, guessed=True) if guessed_app else None)
     resp = Response(render_template(
         "index.html", inbox_address=inbox_address(tag), semester_label=_semester_dates()[2],
         vs_name=_first_name(vs) if vs else None, returning=returning,
-        open_browser=_open_browser(tag, inapp, user_agent) if inapp else None,
+        open_browser=open_browser,
     ))
     _set_cookie(resp, INBOX_COOKIE, tag)
     if vs:

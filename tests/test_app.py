@@ -361,6 +361,26 @@ class AppTests(unittest.TestCase):
                                      "(KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"}
         self.assertNotIn("/h/", in_app.get("/", headers=real_safari).get_data(as_text=True))
 
+    def test_yik_yak_links_on_iphone_safari_get_the_open_in_safari_offer(self):
+        # Yik Yak's Safari view sends Safari's exact user agent; the ?src=yy… tag is the tell.
+        safari_ua = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 "
+                                   "(KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"}
+        chrome_ios = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 "
+                                    "(KHTML, like Gecko) CriOS/129.0 Mobile/15E148 Safari/604.1"}
+        client = app.app.test_client()
+        client.set_cookie(app.INBOX_COOKIE, "yak001")
+        page = html.unescape(client.get("/?src=yy3", headers=safari_ua).get_data(as_text=True))
+        self.assertIn("Opened this in Yik Yak?", page)
+        token = page.split('href="x-safari-https://localhost/h/', 1)[1].split('"', 1)[0]
+        self.assertEqual(self._events()[-1]["props"].get("safari_view_guess"), "Yik Yak")
+        self.assertNotIn("inapp", self._events()[-1]["props"])  # analytics keeps detected apps only
+        self.assertNotIn("/h/", client.get("/?src=yy3", headers=chrome_ios).get_data(as_text=True))
+        self.assertNotIn("/h/", client.get("/?src=ig", headers=safari_ua).get_data(as_text=True))
+
+        safari = app.app.test_client()
+        safari.get(f"/h/{token}")
+        self.assertEqual(safari.get_cookie(app.INBOX_COOKIE).value, "yak001")
+
 
 if __name__ == "__main__":
     unittest.main()
