@@ -175,17 +175,19 @@ def _build_plan() -> dict:
             )}
         finally:
             con.close()
-    for value in sorted(event_students):
-        if re.fullmatch(r"\d{5}", value) or value.startswith("test-"):
-            continue
-        if value not in by_old_key:
-            errors.append(f"event student {value!r} has no student identity")
+    unidentified_event_keys = {
+        value for value in event_students
+        if not re.fullmatch(r"\d{5}", value)
+        and not value.startswith("test-")
+        and value not in by_old_key
+    }
 
     return {
         "errors": errors,
         "identities": identities,
         "by_tag": by_tag,
         "by_old_key": by_old_key,
+        "unidentified_event_keys": unidentified_event_keys,
         "archives": archive_updates,
         "results": result_updates,
         "credentials": credential_updates,
@@ -239,6 +241,8 @@ def _apply(plan: dict) -> str:
                 if old_key != identity["student_id"]:
                     con.execute("UPDATE events SET student = ? WHERE student = ?",
                                 (identity["student_id"], old_key))
+            for old_key in plan["unidentified_event_keys"]:
+                con.execute("UPDATE events SET student = NULL WHERE student = ?", (old_key,))
             for tag, identity in plan["by_tag"].items():
                 con.execute("UPDATE events SET student = ? WHERE visitor = ? AND student IS NULL",
                             (identity["student_id"], analytics.visitor_id(tag)))
@@ -254,7 +258,8 @@ def main() -> None:
     plan = _build_plan()
     print(f"students={len(plan['identities'])} archives={len(plan['archives'])} "
           f"results={len(plan['results'])} credentials={len(plan['credentials'])} "
-          f"stats={'change' if plan['stats_changed'] else 'unchanged'}")
+          f"stats={'change' if plan['stats_changed'] else 'unchanged'} "
+          f"unidentified_event_keys={len(plan['unidentified_event_keys'])}")
     if plan["errors"]:
         for error in plan["errors"]:
             print(f"ERROR: {error}", file=sys.stderr)

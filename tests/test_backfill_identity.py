@@ -43,6 +43,7 @@ class BackfillIdentityTests(unittest.TestCase):
                 with open(path, "w", encoding="utf-8") as f:
                     json.dump(value, f)
             analytics.record("wrap_finished", visitor=analytics.visitor_id(tag), student=old_key)
+            analytics.record("wrap_failed", student="failed-name-hash", reason="login_failed")
 
             try:
                 plan = backfill._build_plan()
@@ -63,11 +64,13 @@ class BackfillIdentityTests(unittest.TestCase):
                 con = analytics.connect()
                 try:
                     student = con.execute("SELECT student_id, email FROM students").fetchone()
-                    event_student = con.execute("SELECT student FROM events").fetchone()[0]
+                    event_students = [row[0] for row in con.execute(
+                        "SELECT student FROM events ORDER BY id"
+                    )]
                 finally:
                     con.close()
                 self.assertEqual(tuple(student), ("85124", "det85124@obu.edu"))
-                self.assertEqual(event_student, "85124")
+                self.assertEqual(event_students, ["85124", None])
                 rerun = backfill._build_plan()
                 self.assertEqual(rerun["errors"], [])
                 self.assertFalse(rerun["stats_changed"])
